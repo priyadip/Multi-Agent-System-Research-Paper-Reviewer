@@ -9,11 +9,12 @@ from .base_agent import BaseAgent
 class MetaReviewerAgent(BaseAgent):
     """Agent responsible for comprehensive paper analysis."""
     
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, model: str = None):
         super().__init__(
             name="MetaReviewerAgent",
             role="Provide comprehensive quality analysis and scoring",
-            api_key=api_key
+            api_key=api_key,
+            model=model
         )
     
     def analyze_methodology(self, paper_info: Dict[str, Any]) -> Dict[str, Any]:

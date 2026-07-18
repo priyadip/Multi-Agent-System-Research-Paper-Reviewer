@@ -11,7 +11,7 @@ An AI-powered multi-agent system for reviewing academic papers from arXiv. A tea
 - **Two interfaces** — an interactive Streamlit web UI with live progress, plus command-line scripts.
 - **In-depth analysis** — goes beyond summarization to surface strengths, weaknesses, and concrete suggestions for improvement.
 - **Citation analysis** — counts references in the bibliography and lists in-text citations with the surrounding context.
-- **Bring your own key** — on the hosted app, each visitor supplies their own Groq API key; nothing is stored server-side.
+- **Bring your own key & model** — on the hosted app, each visitor supplies their own Groq API key and picks the model (e.g. fast Llama 3.1 8B vs. higher-quality Llama 3.3 70B) from a sidebar dropdown; nothing is stored server-side.
 
 ## Agents
 

@@ -13,11 +13,12 @@ from .base_agent import BaseAgent
 class ReaderAgent(BaseAgent):
     """Agent responsible for reading and extracting paper content."""
     
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, model: str = None):
         super().__init__(
             name="ReaderAgent",
             role="Extract paper content from arXiv and provide initial summary",
-            api_key=api_key
+            api_key=api_key,
+            model=model
         )
     
     def fetch_paper_metadata(self, arxiv_id: str) -> Dict[str, Any]:

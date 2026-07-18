@@ -9,11 +9,12 @@ from .base_agent import BaseAgent
 class CriticAgent(BaseAgent):
     """Agent responsible for critical evaluation of papers."""
     
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, model: str = None):
         super().__init__(
             name="CriticAgent",
             role="Identify strengths, weaknesses, and provide constructive criticism",
-            api_key=api_key
+            api_key=api_key,
+            model=model
         )
     
     def identify_strengths(self, paper_info: Dict[str, Any], meta_review: Dict[str, Any]) -> List[str]:

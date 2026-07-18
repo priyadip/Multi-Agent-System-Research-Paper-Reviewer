@@ -16,11 +16,12 @@ class PublicationAgent(BaseAgent):
     internal metadata and PDF text first, then falling back to smart search.
     """
     
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, model: str = None):
         super().__init__(
             name="PublicationAgent",
             role="Identify authoritative publication details from metadata and PDF text.",
-            api_key=api_key
+            api_key=api_key,
+            model=model
         )
 
     def _parse_year(self, text: str) -> Optional[str]:

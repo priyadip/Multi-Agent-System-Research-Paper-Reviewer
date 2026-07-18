@@ -1061,8 +1061,8 @@ st.markdown(f"""
 # Initialize orchestrator.
 # NOT cached: it is built fresh per review with the visitor's own API key, which
 # must never persist on the shared server (st.cache_resource is global to all users).
-def get_orchestrator(api_key):
-    return PaperReviewOrchestrator(api_key=api_key)
+def get_orchestrator(api_key, model=None):
+    return PaperReviewOrchestrator(api_key=api_key, model=model)
 
 # Main title
 st.markdown(f"""
@@ -1137,6 +1137,27 @@ with st.sidebar:
     st.caption("🔒 Used only for this session — never stored. Get a free key at [console.groq.com](https://console.groq.com/keys).")
     if groq_key and not groq_key.startswith("gsk_"):
         st.warning("That doesn't look like a Groq key (they start with `gsk_`).")
+
+    # Model picker — visitor chooses which Groq model runs the review.
+    st.markdown(f"<h3 style='color: {colors['accent']}; margin-top: 1rem;'>🧠 Model</h3>", unsafe_allow_html=True)
+    MODEL_OPTIONS = {
+        "llama-3.1-8b-instant": "Llama 3.1 8B — fastest (default)",
+        "llama-3.3-70b-versatile": "Llama 3.3 70B — best quality",
+        "openai/gpt-oss-120b": "GPT-OSS 120B — large reasoning",
+        "openai/gpt-oss-20b": "GPT-OSS 20B — balanced",
+        "qwen/qwen3.6-27b": "Qwen 3.6 27B",
+        "groq/compound": "Groq Compound — agentic",
+        "groq/compound-mini": "Groq Compound Mini",
+    }
+    selected_model = st.selectbox(
+        "Model",
+        options=list(MODEL_OPTIONS.keys()),
+        format_func=lambda mid: MODEL_OPTIONS[mid],
+        label_visibility="collapsed",
+        key="model_select",
+        help="All agents use this Groq model. Larger models give better reviews but are slower and use more tokens."
+    )
+    st.caption(f"Selected: `{selected_model}`")
     st.divider()
 
     st.markdown(f"<h3 style='color: {colors['accent']};'>🎯 Quick Access</h3>", unsafe_allow_html=True)
@@ -1358,7 +1379,7 @@ elif review_button and arxiv_id:
         for idx in range(len(progress_steps)):
             update_step_display(idx, 'pending')
         
-        orchestrator = get_orchestrator(groq_key)
+        orchestrator = get_orchestrator(groq_key, selected_model)
         start_time = time.time()
         
         # Execute review with progress updates

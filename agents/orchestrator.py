@@ -45,20 +45,23 @@ class ReviewState(TypedDict):
 class PaperReviewOrchestrator:
     """Orchestrates the multi-agent paper review workflow."""
     
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, model: str = None):
         """Initialize the orchestrator with all agents.
 
         Args:
             api_key: Groq API key passed to every agent. On the public app this
                      comes from the user's pasted key (per session, not stored).
                      Falls back to the GROQ_API_KEY env var when omitted.
+            model:   Groq model id to use for every agent (e.g.
+                     "llama-3.3-70b-versatile"). Falls back to the MODEL_NAME env
+                     var, then to llama-3.1-8b-instant, when omitted.
         """
-        self.reader_agent = ReaderAgent(api_key=api_key)
-        self.meta_reviewer_agent = MetaReviewerAgent(api_key=api_key)
-        self.critic_agent = CriticAgent(api_key=api_key)
-        self.cite_agent = CiteAgent(api_key=api_key)
+        self.reader_agent = ReaderAgent(api_key=api_key, model=model)
+        self.meta_reviewer_agent = MetaReviewerAgent(api_key=api_key, model=model)
+        self.critic_agent = CriticAgent(api_key=api_key, model=model)
+        self.cite_agent = CiteAgent(api_key=api_key, model=model)
         # --- INITIALIZE NEW AGENTS ---
-        self.publication_agent = PublicationAgent(api_key=api_key)
+        self.publication_agent = PublicationAgent(api_key=api_key, model=model)
         
         
         # Build the workflow graph

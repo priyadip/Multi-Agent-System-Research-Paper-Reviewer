@@ -10,11 +10,12 @@ from .base_agent import BaseAgent
 class CiteAgent(BaseAgent):
     """Agent responsible for citation and reference analysis."""
     
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, model: str = None):
         super().__init__(
             name="CiteAgent",
             role="Analyze citations, references, and paper impact",
-            api_key=api_key
+            api_key=api_key,
+            model=model
         )
     
     def extract_potential_citations(self, abstract: str) -> List[str]:
