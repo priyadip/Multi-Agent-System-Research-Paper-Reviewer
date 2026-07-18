@@ -1,0 +1,39 @@
+# --- Secrets: never commit API keys ---
+.env
+.env.*
+*.key
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- Virtual environments (huge; never push) ---
+venv/
+.venv/
+.venvtest/
+env/
+ENV/
+
+# --- Large / local-only assets (GitHub rejects >100MB) ---
+*.mp4
+*.mov
+*.avi
+Research Note.pdf
+research_note.pdf
+
+# --- Generated outputs ---
+review_output.json
+eval_results.json
+review_*.json
+review_*.md
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.claude/
