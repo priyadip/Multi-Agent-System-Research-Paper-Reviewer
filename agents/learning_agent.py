@@ -87,28 +87,37 @@ Paper text (may be truncated / imperfectly extracted from PDF):
 
         return self.call_llm(messages, temperature=0.4)
 
-    def answer_question(self, full_text: str, title: str, question: str,
-                        history: List[Tuple[str, str]] = None) -> str:
+    def answer_question(self, retrieved_chunks: List[str], title: str, question: str,
+                        history: List[Tuple[str, str]] = None,
+                        global_understanding: str = "") -> str:
         """
-        Answer a learner's question about the paper, grounded in the paper text,
-        at an undergraduate level with LaTeX for any math.
+        Answer a learner's question using RAG context: the chunks retrieved from
+        the whole paper for this question, plus the verified global understanding.
+        Undergraduate level, with LaTeX for math.
         """
         self.tool_calls_count += 1
 
-        excerpt = (full_text or "")[:10000]
+        context = "\n\n---\n\n".join(retrieved_chunks or [])
+        understanding = (global_understanding or "")[:4000]
 
         messages = [
             {"role": "system", "content": f"""You are a friendly tutor helping an undergraduate understand this research
-paper. Answer questions clearly with intuition and analogies. Ground your answers
-in the paper; if it doesn't cover something, use your general knowledge and say so.
+paper. Answer questions clearly with intuition and analogies. Ground your answer in
+the RETRIEVED CONTEXT and the paper understanding below; if they don't cover
+something, use your general knowledge and say so explicitly.
 
 {MATH_FORMATTING_RULES}
 
 Paper title: {title}
 
-Paper excerpt (may be truncated / imperfectly extracted):
+PAPER UNDERSTANDING (overview of the whole paper):
 \"\"\"
-{excerpt}
+{understanding}
+\"\"\"
+
+RETRIEVED CONTEXT (passages from the paper most relevant to this question):
+\"\"\"
+{context}
 \"\"\""""}
         ]
 

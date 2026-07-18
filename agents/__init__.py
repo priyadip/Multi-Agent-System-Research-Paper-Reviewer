@@ -10,6 +10,9 @@ from .cite_agent import CiteAgent
 from .orchestrator import PaperReviewOrchestrator
 from .publication_agent import PublicationAgent
 from .learning_agent import LearningAgent
+from .understanding_agent import UnderstandingAgent
+from .verification_agent import VerificationAgent
+from .rag_store import PaperRAG
 
 
 __all__ = [
@@ -20,5 +23,8 @@ __all__ = [
     'CiteAgent',
     'PaperReviewOrchestrator',
     'PublicationAgent',
-    'LearningAgent'
+    'LearningAgent',
+    'UnderstandingAgent',
+    'VerificationAgent',
+    'PaperRAG'
 ]

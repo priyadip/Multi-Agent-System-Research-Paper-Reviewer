@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, List
 import os
 import sys
+import re
+import time
 from groq import Groq
 from dotenv import load_dotenv
 
@@ -56,17 +58,32 @@ class BaseAgent(ABC):
         """
         if self.client is None:
             return "Error: No Groq API key provided. Please paste your Groq API key to run the review."
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=2048
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            print(f"Error calling LLM: {e}")
-            return f"Error: {str(e)}"
+
+        max_retries = 4
+        for attempt in range(max_retries):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=2048
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                msg = str(e)
+                is_rate_limit = "429" in msg or "rate limit" in msg.lower()
+                if is_rate_limit and attempt < max_retries - 1:
+                    # Respect a suggested wait if present, else exponential backoff.
+                    wait = 2 ** (attempt + 1)  # 2, 4, 8s
+                    m = re.search(r"try again in ([\d.]+)s", msg)
+                    if m:
+                        wait = max(wait, float(m.group(1)) + 0.5)
+                    print(f"Rate limited; retrying in {wait:.1f}s "
+                          f"(attempt {attempt + 1}/{max_retries})...")
+                    time.sleep(min(wait, 30))
+                    continue
+                print(f"Error calling LLM: {e}")
+                return f"Error: {str(e)}"
     
     @abstractmethod
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:

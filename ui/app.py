@@ -16,6 +16,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agents.orchestrator import PaperReviewOrchestrator
 from agents.learning_agent import LearningAgent
+from agents.understanding_agent import UnderstandingAgent
+from agents.verification_agent import VerificationAgent
+from agents.rag_store import PaperRAG
 
 # Helper function to convert markdown to HTML
 def markdown_to_html(text):
@@ -1084,6 +1087,19 @@ st.markdown(f"""
 def get_orchestrator(api_key, model=None):
     return PaperReviewOrchestrator(api_key=api_key, model=model)
 
+
+@st.cache_resource(show_spinner=False)
+def get_embedder():
+    """Load the semantic embedding model once (cached). Returns an embed function,
+    or None so PaperRAG falls back to lexical TF-IDF if unavailable."""
+    try:
+        from sentence_transformers import SentenceTransformer
+        model = SentenceTransformer("all-MiniLM-L6-v2")
+        return lambda texts: model.encode(list(texts), show_progress_bar=False)
+    except Exception as e:
+        print(f"[Learn] semantic embedder unavailable, using TF-IDF: {e}")
+        return None
+
 # Main title
 st.markdown(f"""
 <h1><span class="gradient-title">📄 Multi-Agent Research Paper Reviewer</span></h1>
@@ -1689,7 +1705,7 @@ if "review_result" in st.session_state:
 
     with tab6:
         st.markdown(f"<h3 style='color: {colors['accent']};'>🎓 Learn This Paper</h3>", unsafe_allow_html=True)
-        st.caption("Undergraduate-level explanation of the concepts and math, plus a Q&A tutor. Equations render as LaTeX.")
+        st.caption("Three agents read the WHOLE paper: Understanding (comprehend + connect all pages) → Verification (checks coverage) → Tutor (answers via semantic RAG). Math renders as LaTeX.")
 
         learn_text = result.get('full_text', '') or result['summary'].get('abstract', '')
         learn_title = result.get('paper_title', '')
@@ -1697,47 +1713,87 @@ if "review_result" in st.session_state:
         if not groq_key:
             st.info("🔑 Paste your Groq API key in the sidebar to use the Learn feature.")
         elif not learn_text:
-            st.warning("No paper text was extracted, so there's nothing to explain for this paper.")
+            st.warning("No paper text was extracted, so there's nothing to learn for this paper.")
         else:
-            learner = LearningAgent(api_key=groq_key, model=selected_model)
-
-            # --- Full explanation (on demand) ---
-            if st.button("📖 Explain this paper", key="explain_btn", use_container_width=True):
-                with st.spinner("Generating explanation... (larger models take longer)"):
-                    st.session_state['paper_explanation'] = learner.explain_paper(learn_text, learn_title)
-
-            if st.session_state.get('paper_explanation'):
-                st.markdown(normalize_latex(st.session_state['paper_explanation']))
-
-            st.divider()
-
-            # --- Q&A tutor chat ---
-            st.markdown(f"<h4 style='color: {colors['accent']};'>💬 Ask about this paper</h4>", unsafe_allow_html=True)
-
-            if 'learn_chat' not in st.session_state:
-                st.session_state['learn_chat'] = []
-
-            for role, msg in st.session_state['learn_chat']:
-                with st.chat_message(role):
-                    st.markdown(normalize_latex(msg))
-
-            # st.chat_input can't live inside tabs, so use a form instead.
-            with st.form(key="learn_qa_form", clear_on_submit=True):
-                user_q = st.text_input(
-                    "Your question",
-                    placeholder="e.g. Explain the main equation, or What is self-attention?",
-                    label_visibility="collapsed"
-                )
-                asked = st.form_submit_button("Ask", use_container_width=True)
-
-            if asked and user_q:
-                st.session_state['learn_chat'].append(("user", user_q))
-                with st.spinner("Thinking..."):
-                    answer = learner.answer_question(
-                        learn_text, learn_title, user_q, st.session_state['learn_chat']
+            # --- Step 1: Build full understanding (RAG + comprehension + verification) ---
+            if st.button("🧠 Build full understanding", key="build_understanding_btn", use_container_width=True):
+                with st.spinner("Reading the whole paper, connecting sections, and verifying coverage… "
+                                "(5–8 LLM calls — may take a minute, and longer on the free tier due to rate limits)"):
+                    rag = PaperRAG(embed_fn=get_embedder()).build(learn_text)
+                    ua = UnderstandingAgent(api_key=groq_key, model=selected_model)
+                    understanding = ua.build_understanding(learn_text, learn_title)
+                    va = VerificationAgent(api_key=groq_key, model=selected_model)
+                    verification = va.verify(
+                        understanding.get('part_notes', []),
+                        understanding.get('global_understanding', ''),
+                        learn_title
                     )
-                st.session_state['learn_chat'].append(("assistant", answer))
-                st.rerun()
+                    st.session_state['rag'] = rag
+                    st.session_state['understanding'] = understanding
+                    st.session_state['verification'] = verification
+                    st.session_state['learn_chat'] = []
+
+            if st.session_state.get('understanding'):
+                understanding = st.session_state['understanding']
+                verification = st.session_state.get('verification', {})
+                rag = st.session_state.get('rag')
+
+                # Coverage + retrieval-mode badges
+                b1, b2 = st.columns(2)
+                score = verification.get('score')
+                with b1:
+                    st.metric("✅ Understanding Coverage",
+                              f"{score}/100" if score is not None else "N/A",
+                              help="Verification agent's score for how completely & faithfully the understanding covers the paper")
+                with b2:
+                    mode_label = {"semantic": "Semantic (embeddings)", "tfidf": "Lexical (TF-IDF)"}.get(
+                        getattr(rag, "mode", ""), "n/a")
+                    st.metric("🔎 RAG Retrieval", mode_label,
+                              help="How follow-up questions find relevant passages across the whole paper")
+
+                with st.expander("🔬 Verification report (coverage & faithfulness)", expanded=False):
+                    st.markdown(verification.get('report', 'No report.'))
+
+                st.markdown(f"<h4 style='color: {colors['accent']};'>📘 Full Understanding</h4>", unsafe_allow_html=True)
+                st.markdown(normalize_latex(understanding.get('global_understanding', '')))
+
+                st.divider()
+
+                # --- Step 2: Q&A over the whole paper via RAG ---
+                st.markdown(f"<h4 style='color: {colors['accent']};'>💬 Ask about this paper</h4>", unsafe_allow_html=True)
+                st.caption("Answers are grounded in passages retrieved from the whole paper (RAG) + the verified understanding.")
+
+                if 'learn_chat' not in st.session_state:
+                    st.session_state['learn_chat'] = []
+
+                for role, msg in st.session_state['learn_chat']:
+                    with st.chat_message(role):
+                        st.markdown(normalize_latex(msg))
+
+                # st.chat_input can't live inside tabs, so use a form instead.
+                with st.form(key="learn_qa_form", clear_on_submit=True):
+                    user_q = st.text_input(
+                        "Your question",
+                        placeholder="e.g. Explain the loss function, or What does Table 2 show?",
+                        label_visibility="collapsed"
+                    )
+                    asked = st.form_submit_button("Ask", use_container_width=True)
+
+                if asked and user_q:
+                    st.session_state['learn_chat'].append(("user", user_q))
+                    with st.spinner("Retrieving relevant passages and answering…"):
+                        chunks = rag.retrieve(user_q, k=4) if rag else []
+                        tutor = LearningAgent(api_key=groq_key, model=selected_model)
+                        answer = tutor.answer_question(
+                            chunks, learn_title, user_q,
+                            st.session_state['learn_chat'],
+                            understanding.get('global_understanding', '')
+                        )
+                    st.session_state['learn_chat'].append(("assistant", answer))
+                    st.rerun()
+            else:
+                st.info("Click **🧠 Build full understanding** to comprehend the whole paper "
+                        "and enable RAG-based Q&A.")
 
     # Download section
     st.divider()
@@ -1840,7 +1896,8 @@ if "review_result" in st.session_state:
             if 'progress_data' in st.session_state:
                 st.session_state.progress_data = {}
             # Reset Learn tab state for the next paper
-            st.session_state.pop('paper_explanation', None)
+            for _k in ('paper_explanation', 'rag', 'understanding', 'verification'):
+                st.session_state.pop(_k, None)
             st.session_state['learn_chat'] = []
             st.rerun()
 
