@@ -16,6 +16,8 @@ An AI-powered multi-agent system for reviewing academic papers from arXiv. A tea
 
 ## Agents
 
+**Review pipeline** (LangGraph, runs on submit):
+
 | Agent | Role |
 |-------|------|
 | **Reader** | Fetches arXiv metadata, downloads the PDF, and extracts content |
@@ -24,11 +26,22 @@ An AI-powered multi-agent system for reviewing academic papers from arXiv. A tea
 | **Cite** | Counts references and analyzes in-text citations and their context |
 | **Publication** | Placeholder for venue detection (currently paused) |
 
+**Learn subsystem** (multi-agent RAG, on-demand in the 🎓 Learn tab):
+
+| Agent | Role |
+|-------|------|
+| **Understanding** | Reads the *whole* paper (map-reduce) into one connected, undergrad-level explanation |
+| **Verification** | LLM judge that scores the understanding's coverage & faithfulness |
+| **Tutor** | Answers follow-up questions grounded in RAG-retrieved passages + the understanding |
+
+> See [project_structure.md](project_structure.md) for the full architecture and code layout.
+
 ## Tech Stack
 
 - **Orchestration:** LangGraph
-- **LLM:** Groq (`llama-3.1-8b-instant` by default)
-- **UI:** Streamlit
+- **LLM:** Groq (`llama-3.1-8b-instant` by default; selectable in the UI)
+- **RAG:** sentence-transformers embeddings with a scikit-learn TF-IDF fallback
+- **UI:** Streamlit (math rendered as LaTeX/KaTeX)
 - **Data:** arXiv API, pypdf
 
 ---
@@ -124,13 +137,26 @@ This app deploys on [Streamlit Community Cloud](https://share.streamlit.io) with
 ## Project Structure
 
 ```
-├── agents/          # AI agents and the LangGraph orchestrator
-├── ui/              # Streamlit application
-├── eval/            # Evaluation harness, metrics, and test cases
-├── mcp-server/      # Model Context Protocol (MCP) server
-├── example_usage.py # CLI demo / batch processing
-└── requirements.txt # Python dependencies
+├── agents/
+│   ├── base_agent.py          # Groq client + call_llm (with retry/backoff)
+│   ├── reader_agent.py        # arXiv metadata + PDF extraction
+│   ├── meta_reviewer_agent.py # Methodology & contribution
+│   ├── critic_agent.py        # Strengths / weaknesses / improvements
+│   ├── cite_agent.py          # Reference count + in-text citations
+│   ├── publication_agent.py   # Venue detection (paused)
+│   ├── orchestrator.py        # LangGraph review workflow
+│   ├── understanding_agent.py # Whole-paper comprehension (Learn)
+│   ├── verification_agent.py  # Coverage/faithfulness judge (Learn)
+│   ├── learning_agent.py      # Tutor: explanations + RAG Q&A (Learn)
+│   └── rag_store.py           # PaperRAG: chunk + embed + retrieve
+├── ui/app.py                  # Streamlit application
+├── eval/                      # Evaluation harness, metrics, test cases
+├── mcp-server/                # Model Context Protocol (MCP) server
+├── example_usage.py           # CLI demo / batch processing
+└── requirements.txt           # Python dependencies
 ```
+
+See **[project_structure.md](project_structure.md)** for the architecture diagrams and design notes.
 
 ## License
 
