@@ -9,6 +9,7 @@ from .critic_agent import CriticAgent
 from .cite_agent import CiteAgent
 from .orchestrator import PaperReviewOrchestrator
 from .publication_agent import PublicationAgent
+from .learning_agent import LearningAgent
 
 
 __all__ = [
@@ -18,5 +19,6 @@ __all__ = [
     'CriticAgent',
     'CiteAgent',
     'PaperReviewOrchestrator',
-    'PublicationAgent'     
+    'PublicationAgent',
+    'LearningAgent'
 ]

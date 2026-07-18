@@ -192,6 +192,10 @@ class PaperReviewOrchestrator:
                 "key_points": reader_data.get("key_points", {}),
                 "abstract": reader_data.get("metadata", {}).get("abstract", "")
             },
+
+            # Full extracted PDF text — used by the UI's "Learn" tab. Excluded
+            # from the JSON/MD downloads to keep them small.
+            "full_text": reader_data.get("full_text", ""),
             
             "meta_review": {
                 "methodology": meta_data.get("methodology_analysis", {}),

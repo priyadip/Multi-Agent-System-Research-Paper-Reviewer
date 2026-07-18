@@ -15,6 +15,7 @@ import re
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agents.orchestrator import PaperReviewOrchestrator
+from agents.learning_agent import LearningAgent
 
 # Helper function to convert markdown to HTML
 def markdown_to_html(text):
@@ -1528,12 +1529,13 @@ if "review_result" in st.session_state:
     st.markdown(f"<h3 style='text-align: center; color: {colors['text_primary']};'>📚 Detailed Analysis</h3>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📖 Summary",
         "⭐ Meta-Review",
         "🔍 Critical Analysis",
         "📚 Citations",
-        "📅 Publication"
+        "📅 Publication",
+        "🎓 Learn"
     ])
     
     with tab1:
@@ -1665,7 +1667,59 @@ if "review_result" in st.session_state:
         
         with st.expander("🔍 Web Search Evidence", expanded=True):
             st.markdown(f"<p style='line-height: 1.8; color: {colors['text_primary']};'>{markdown_to_html(pub_data.get('web_search_evidence', 'No evidence found.'))}</p>", unsafe_allow_html=True)
-    
+
+    with tab6:
+        st.markdown(f"<h3 style='color: {colors['accent']};'>🎓 Learn This Paper</h3>", unsafe_allow_html=True)
+        st.caption("Undergraduate-level explanation of the concepts and math, plus a Q&A tutor. Equations render as LaTeX.")
+
+        learn_text = result.get('full_text', '') or result['summary'].get('abstract', '')
+        learn_title = result.get('paper_title', '')
+
+        if not groq_key:
+            st.info("🔑 Paste your Groq API key in the sidebar to use the Learn feature.")
+        elif not learn_text:
+            st.warning("No paper text was extracted, so there's nothing to explain for this paper.")
+        else:
+            learner = LearningAgent(api_key=groq_key, model=selected_model)
+
+            # --- Full explanation (on demand) ---
+            if st.button("📖 Explain this paper", key="explain_btn", use_container_width=True):
+                with st.spinner("Generating explanation... (larger models take longer)"):
+                    st.session_state['paper_explanation'] = learner.explain_paper(learn_text, learn_title)
+
+            if st.session_state.get('paper_explanation'):
+                st.markdown(st.session_state['paper_explanation'])
+
+            st.divider()
+
+            # --- Q&A tutor chat ---
+            st.markdown(f"<h4 style='color: {colors['accent']};'>💬 Ask about this paper</h4>", unsafe_allow_html=True)
+
+            if 'learn_chat' not in st.session_state:
+                st.session_state['learn_chat'] = []
+
+            for role, msg in st.session_state['learn_chat']:
+                with st.chat_message(role):
+                    st.markdown(msg)
+
+            # st.chat_input can't live inside tabs, so use a form instead.
+            with st.form(key="learn_qa_form", clear_on_submit=True):
+                user_q = st.text_input(
+                    "Your question",
+                    placeholder="e.g. Explain the main equation, or What is self-attention?",
+                    label_visibility="collapsed"
+                )
+                asked = st.form_submit_button("Ask", use_container_width=True)
+
+            if asked and user_q:
+                st.session_state['learn_chat'].append(("user", user_q))
+                with st.spinner("Thinking..."):
+                    answer = learner.answer_question(
+                        learn_text, learn_title, user_q, st.session_state['learn_chat']
+                    )
+                st.session_state['learn_chat'].append(("assistant", answer))
+                st.rerun()
+
     # Download section
     st.divider()
     st.markdown(f"<h3 style='text-align: center; color: {colors['text_primary']};'>📥 Export & Actions</h3>", unsafe_allow_html=True)
@@ -1674,7 +1728,9 @@ if "review_result" in st.session_state:
     col1, col2, col3 = st.columns([1, 1, 1])
     
     with col1:
-        json_str = json.dumps(result, indent=2, default=str)
+        # Exclude the large extracted paper text from the download.
+        download_result = {k: v for k, v in result.items() if k != 'full_text'}
+        json_str = json.dumps(download_result, indent=2, default=str)
         st.download_button(
             "📥 Download JSON",
             json_str,
@@ -1764,6 +1820,9 @@ if "review_result" in st.session_state:
                 del st.session_state.arxiv_id
             if 'progress_data' in st.session_state:
                 st.session_state.progress_data = {}
+            # Reset Learn tab state for the next paper
+            st.session_state.pop('paper_explanation', None)
+            st.session_state['learn_chat'] = []
             st.rerun()
 
 elif review_button and not arxiv_id:
