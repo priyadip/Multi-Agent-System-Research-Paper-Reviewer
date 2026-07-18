@@ -1,0 +1,10 @@
+# Streamlit configuration.
+[server]
+# Disable the source file-watcher. On a deployed app it's unnecessary (updates
+# come via redeploy), and it otherwise introspects every `transformers` submodule,
+# producing hundreds of harmless "No module named 'torchvision'" tracebacks.
+fileWatcherType = "none"
+headless = true
+
+[browser]
+gatherUsageStats = false
