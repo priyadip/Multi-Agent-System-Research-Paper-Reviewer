@@ -1222,10 +1222,10 @@ with st.sidebar:
     <div style='font-size: 0.85rem; line-height: 1.8; color: {colors['text_secondary']};'>
     <p><strong style='color: {colors['text_primary']};'>Architecture</strong></p>
     <ul style='margin-left: 1rem; margin-top: 0.5rem;'>
-        <li>🧠 LLM: Groq Llama-3.1-8b</li>
+        <li>🧠 LLM: Groq (selectable)</li>
         <li>🔗 Framework: LangGraph</li>
-        <li>🌐 Protocol: MCP Server</li>
-        <li>🤖 Agents: 5 Specialized</li>
+        <li>🎓 Learn: multi-agent RAG</li>
+        <li>🤖 Agents: 5 review + 3 learn</li>
     </ul>
     </div>
     """, unsafe_allow_html=True)
@@ -1285,7 +1285,7 @@ with arch_col4:
         <div style='font-size: 2rem; margin-bottom: 0.5rem;'>🤖</div>
         <div style='font-weight: 600; color: {colors['accent']}; margin-bottom: 0.5rem;'>Analysis</div>
         <div style='font-size: 0.85rem; color: {colors['text_secondary']}; line-height: 1.5;'>
-            5 Specialized Agents<br/>📊 Parallel processing
+            8 Specialized Agents<br/>📊 Review + Learn (RAG)
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -1297,9 +1297,10 @@ st.markdown(f"""
 <div class="description-box">
     <h3 style='color: {colors['accent']}; margin-top: 0; font-size: 1.2rem;'>🤖 How It Works</h3>
     <p style='font-size: 0.95rem; line-height: 1.8; color: {colors['text_secondary']}; margin: 0;'>
-        Our system deploys 5 specialized agents that work in parallel: The Reader Agent extracts content, 
-        Meta-Reviewer evaluates quality, Critic Agent performs deep analysis, Citation Agent analyzes references, 
-        and Publication Agent discovers venues. All orchestrated through LangGraph with real-time progress tracking.
+        A LangGraph pipeline runs specialized agents in sequence: the Reader extracts content,
+        the Meta-Reviewer evaluates quality, the Critic performs deep analysis, and the Cite agent analyzes
+        references. Then the 🎓 Learn tab adds a multi-agent RAG system — Understanding, Verification, and a
+        Tutor — that explains the whole paper's concepts and math and answers your follow-up questions.
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -1325,14 +1326,15 @@ for col, (emoji, name, desc) in zip([col1, col2, col3], agents_row1):
         </div>
         """, unsafe_allow_html=True)
 
-col4, col5 = st.columns(2)
+col4, col5, col6 = st.columns(3)
 
 agents_row2 = [
     ("📚", "Cite Agent", "Analyzes citation patterns, reference quality, and academic context"),
-    ("📅", "Publication Agent", "Discovers official publication venues through intelligent web search")
+    ("🎓", "Learn Agents", "Understand → Verify → Tutor: explains the whole paper's concepts and math, with RAG-based Q&A"),
+    ("📅", "Publication Agent", "Venue detection (currently paused — returns a placeholder)")
 ]
 
-for col, (emoji, name, desc) in zip([col4, col5], agents_row2):
+for col, (emoji, name, desc) in zip([col4, col5, col6], agents_row2):
     with col:
         st.markdown(f"""
         <div class="agent-card">
