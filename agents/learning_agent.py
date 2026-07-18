@@ -10,6 +10,17 @@ from typing import Dict, Any, List, Tuple
 from .base_agent import BaseAgent
 
 
+# Rules that keep the model's math renderable by Streamlit's KaTeX engine.
+MATH_FORMATTING_RULES = r"""MATH FORMATTING RULES (the app renders with KaTeX — follow these exactly):
+- Inline math: wrap in single dollars, e.g. $a^2 + b^2 = c^2$.
+- Display math: wrap in double dollars on their own lines, e.g. $$E = mc^2$$.
+- Do NOT use \[ \], \( \), \begin{align}, \begin{equation}, or proof/theorem environments.
+- For multi-line derivations or proofs, use aligned inside display math:
+  $$\begin{aligned} x &= a + b \\ &= c \end{aligned}$$
+- Use \frac, \sum, \int, \prod, \sqrt, \mathbf, \mathbb, \hat, subscripts (_) and superscripts (^) normally.
+- Every equation must be wrapped in $...$ or $$...$$ so it renders."""
+
+
 class LearningAgent(BaseAgent):
     """Agent that teaches the paper: concepts, intuition, and math."""
 
@@ -54,7 +65,7 @@ Identify the paper's main equations / formulas / methods and explain each one:
 - what it computes,
 - what every symbol means,
 - the intuition for *why* it is written that way.
-Render all mathematics as LaTeX: inline as $...$ and display equations as $$...$$.
+Show the full equations (and short derivations or proof sketches where relevant).
 If the extracted text garbled an equation, reconstruct it from your knowledge of
 the paper and note that you did so.
 
@@ -63,6 +74,8 @@ The key insight that makes the approach effective.
 
 ## Takeaways
 3-4 bullet points a student should remember.
+
+{MATH_FORMATTING_RULES}
 
 Paper title: {title}
 
@@ -86,9 +99,10 @@ Paper text (may be truncated / imperfectly extracted from PDF):
 
         messages = [
             {"role": "system", "content": f"""You are a friendly tutor helping an undergraduate understand this research
-paper. Answer questions clearly with intuition and analogies. Render any
-mathematics as LaTeX (inline $...$, display $$...$$). Ground your answers in the
-paper; if it doesn't cover something, use your general knowledge and say so.
+paper. Answer questions clearly with intuition and analogies. Ground your answers
+in the paper; if it doesn't cover something, use your general knowledge and say so.
+
+{MATH_FORMATTING_RULES}
 
 Paper title: {title}
 

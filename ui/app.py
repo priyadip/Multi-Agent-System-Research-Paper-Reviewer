@@ -34,6 +34,25 @@ def markdown_to_html(text):
     
     return text
 
+def normalize_latex(text):
+    """Make LLM-generated LaTeX renderable by Streamlit's KaTeX engine.
+
+    Streamlit only recognizes $...$ / $$...$$ and KaTeX rejects the align/equation
+    document environments, so convert the delimiters and environments models
+    commonly emit.
+    """
+    if not text:
+        return text
+    # \[ ... \]  ->  $$ ... $$   and   \( ... \)  ->  $ ... $
+    text = re.sub(r'\\\[(.+?)\\\]', r'$$\1$$', text, flags=re.DOTALL)
+    text = re.sub(r'\\\((.+?)\\\)', r'$\1$', text, flags=re.DOTALL)
+    # align/equation environments -> aligned (KaTeX renders aligned inside $$)
+    for env in ('align*', 'align', 'equation*', 'equation', 'gather*', 'gather'):
+        text = text.replace(r'\begin{' + env + '}', r'\begin{aligned}')
+        text = text.replace(r'\end{' + env + '}', r'\end{aligned}')
+    return text
+
+
 # Page configuration
 st.set_page_config(
     page_title="Multi-Agent Paper Reviewer",
@@ -1688,7 +1707,7 @@ if "review_result" in st.session_state:
                     st.session_state['paper_explanation'] = learner.explain_paper(learn_text, learn_title)
 
             if st.session_state.get('paper_explanation'):
-                st.markdown(st.session_state['paper_explanation'])
+                st.markdown(normalize_latex(st.session_state['paper_explanation']))
 
             st.divider()
 
@@ -1700,7 +1719,7 @@ if "review_result" in st.session_state:
 
             for role, msg in st.session_state['learn_chat']:
                 with st.chat_message(role):
-                    st.markdown(msg)
+                    st.markdown(normalize_latex(msg))
 
             # st.chat_input can't live inside tabs, so use a form instead.
             with st.form(key="learn_qa_form", clear_on_submit=True):
