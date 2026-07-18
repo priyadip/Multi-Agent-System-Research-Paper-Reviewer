@@ -1,31 +1,47 @@
 # Multi-Agent Research Paper Reviewer
 
-> **Live demo:** paste your own free [Groq API key](https://console.groq.com/keys) in the sidebar to run a review. The key is used only for your session and is never stored.
->
-> **Deploy your own (free):** on [Streamlit Community Cloud](https://share.streamlit.io) → *New app* → this repo → main file `ui/app.py`.
+> **Live demo:** https://multi-agent-system-research-paper-reviewer.streamlit.app/
+> Paste your own free [Groq API key](https://console.groq.com/keys) in the sidebar to run a review. The key is used only for your session and is never stored.
 
-This project is an AI-powered multi-agent system for conducting comprehensive reviews of academic papers from arXiv. It uses a team of specialized AI agents, orchestrated by LangGraph, to perform tasks like reading, summarizing, critiquing, and analyzing citations.
+An AI-powered multi-agent system for reviewing academic papers from arXiv. A team of specialized agents, orchestrated with **LangGraph** and powered by **Groq** LLMs, reads a paper and produces a structured review: a summary, a quality assessment, a critical analysis, and a citation breakdown.
 
 ## Features
 
-- **Multi-Agent Architecture:** Specialized agents for reading, critiquing, citation analysis, and more.
-- **Dual Interfaces:** Use the rich, interactive Streamlit web UI or the flexible command-line script.
-- **In-Depth Analysis:** Goes beyond summarization to provide critical analysis, including strengths, weaknesses, and suggested improvements.
-- **Citation & Publication Data:** Analyzes paper citations and searches for official publication venues.
-- **Extensible:** Built with a modular architecture that is easy to extend.
+- **Multi-agent architecture** — specialized agents for reading, meta-review, critique, and citation analysis, coordinated by a LangGraph workflow.
+- **Two interfaces** — an interactive Streamlit web UI with live progress, plus command-line scripts.
+- **In-depth analysis** — goes beyond summarization to surface strengths, weaknesses, and concrete suggestions for improvement.
+- **Citation analysis** — counts references in the bibliography and lists in-text citations with the surrounding context.
+- **Bring your own key** — on the hosted app, each visitor supplies their own Groq API key; nothing is stored server-side.
 
-## Setup Instructions
+## Agents
 
-Follow these steps to get the project running on your local machine.
+| Agent | Role |
+|-------|------|
+| **Reader** | Fetches arXiv metadata, downloads the PDF, and extracts content |
+| **Meta-Reviewer** | Assesses methodology and contribution, produces an overall review |
+| **Critic** | Identifies strengths, weaknesses, and suggested improvements |
+| **Cite** | Counts references and analyzes in-text citations and their context |
+| **Publication** | Placeholder for venue detection (currently paused) |
 
-### 1. Clone the Repository
+## Tech Stack
 
-Not Requird, as you have full file.
+- **Orchestration:** LangGraph
+- **LLM:** Groq (`llama-3.1-8b-instant` by default)
+- **UI:** Streamlit
+- **Data:** arXiv API, pypdf
 
+---
 
-### 2. Create and Activate a Virtual Environment
+## Getting Started (Local)
 
-It is highly recommended to use a virtual environment to manage project dependencies.
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/priyadip/Multi-Agent-System-Research-Paper-Reviewer.git
+cd Multi-Agent-System-Research-Paper-Reviewer
+```
+
+### 2. Create and activate a virtual environment
 
 **On Windows:**
 ```bash
@@ -39,102 +55,86 @@ python3 -m venv venv
 source venv/bin/activate
 ```
 
-### 3. Install Dependencies
-
-Install all the required Python packages using the `requirements.txt` file.
+### 3. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
-May be its takes more than 15 minutes, so you have to wait until the full process is completed.
 
-### 4. Configure Environment Variables
+### 4. Configure your Groq API key
 
-The application requires API keys to function.
-
-  Add your Groq API key to the `.env` file:
-
-    ```
-    GROQ_API_KEY="your_groq_api_key_here"
-    ```
-
-# Environment Setup
-
-This project requires environment variables to authenticate with the Groq API and configure the model used for all agents.
-
-## Environment Variables
-
-Create a `.env` file in the project root and add:
+Create a `.env` file in the project root:
 
 ```env
-GROQ_API_KEY="your_groq_api_key_here"
+GROQ_API_KEY="gsk_your_key_here"
 MODEL_NAME=llama-3.1-8b-instant
 ```
 
-## How to Obtain Your Groq API Key
+> Get a free key at the [Groq Console](https://console.groq.com/keys) → **API Keys** → **Create API Key**.
+> Keep your key secret and never commit `.env` to version control (it is already in `.gitignore`).
 
-Follow these steps to generate your API key:
+*Note: the hosted Streamlit app does not use `.env` — visitors paste their own key in the sidebar instead.*
 
-1. Visit the [Groq Console](https://console.groq.com/docs/model/llama-3.1-8b-instant)
-2. Log in using your email ID
-3. In the top-right corner, click on **API Keys**
-4. Click **Create API Key**, give it a name, and press Enter
-5. Copy the generated key and paste it into your `.env` file
+---
 
-## Example `.env` File
+## Usage
 
-```env
-GROQ_API_KEY="gsk_XXXXXXXXXXXXXXXXXXXXXXXX"
-MODEL_NAME=llama-3.1-8b-instant
-```
-
-## Notes
-
-- Keep your API key secure and never commit it to version control
-
-
-
-
-## How to Run
-
-You can run the project using either the Streamlit Web UI or the command-line script.
-
-### Using the Streamlit Web UI 
-The web UI provides a rich, interactive experience with real-time progress updates.
-
-To start the Streamlit server, run the following command:
+### Streamlit Web UI
 
 ```bash
 streamlit run ui/app.py
 ```
 
-Now, open your web browser and navigate to the local URL provided by Streamlit (usually `http://localhost:8501`).
+Then open the local URL Streamlit prints (usually `http://localhost:8501`), enter an arXiv ID, and click **Review**.
 
+### Command Line
 
-###  Run the Multi-Agent System
+Review a single paper by arXiv ID:
 
 ```bash
-python agents/orchestrator.py --arxiv-id 2301.12345
+python agents/orchestrator.py --arxiv-id 1706.03762
 ```
 
-### Using the Command-Line Script
-
-The `example_usage.py` script demonstrates the core functionality of the agent system and allows for batch processing.
-
-To run the script, use:
+Run the guided examples (basic review, batch, comparison, report export):
 
 ```bash
 python example_usage.py
 ```
 
-The script will guide you through several examples, from a basic review to saving formatted reports.
+### Evaluation
+
+```bash
+python eval/run_eval.py
+```
+
+---
+
+## Deploy Your Own (Free)
+
+This app deploys on [Streamlit Community Cloud](https://share.streamlit.io) with no CI/CD setup — it auto-redeploys on every push to `main`:
+
+1. Sign in at [share.streamlit.io](https://share.streamlit.io) with GitHub.
+2. **Create app** → **Deploy from GitHub**.
+3. Repository: this repo &nbsp;·&nbsp; Branch: `main` &nbsp;·&nbsp; Main file: `ui/app.py`.
+4. Deploy. Visitors paste their own Groq key to run reviews.
+
+---
 
 ## Project Structure
 
-- **/agents**: Contains the core logic for all AI agents and the orchestrator graph.
-- **/ui**: The Streamlit application code.
-- **/eval**: Scripts and data for evaluating the performance of the agents.
-- **/mcp-server**: A server for the Multi-Agent Collaboration Protocol (MCP).
-- **example_usage.py**: A command-line script for demonstrating and testing the system.
-- **requirements.txt**: A list of all Python dependencies.
+```
+├── agents/          # AI agents and the LangGraph orchestrator
+├── ui/              # Streamlit application
+├── eval/            # Evaluation harness, metrics, and test cases
+├── mcp-server/      # Model Context Protocol (MCP) server
+├── example_usage.py # CLI demo / batch processing
+└── requirements.txt # Python dependencies
+```
 
+## License
+
+Released under the MIT License.
+
+## Author
+
+**Priyadip Sau** — [website](https://priyadipsau.in/) · saupriyadip571@gmail.com
