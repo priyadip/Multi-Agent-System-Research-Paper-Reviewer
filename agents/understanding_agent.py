@@ -37,12 +37,13 @@ class UnderstandingAgent(BaseAgent):
 
     def summarize_parts(self, full_text: str, title: str) -> List[str]:
         """MAP: summarize each part of the paper into structured notes."""
-        segments = self._segments(full_text)
+        segments = [s for s in self._segments(full_text) if s.strip()]
+        total = len(segments)
+        print(f"[UnderstandingAgent] Reading paper in {total} parts...", flush=True)
         notes = []
         for i, seg in enumerate(segments, 1):
-            if not seg.strip():
-                continue
             self.tool_calls_count += 1
+            print(f"[UnderstandingAgent] Summarizing part {i}/{total}...", flush=True)
             resp = self.call_llm([
                 {"role": "system", "content": self.get_system_prompt()},
                 {"role": "user", "content": f"""This is part {i} of {len(segments)} of the paper "{title}".
@@ -60,6 +61,7 @@ Part {i}:
     def synthesize(self, part_notes: List[str], title: str) -> str:
         """REDUCE: connect all part-notes into one undergraduate-level explanation."""
         self.tool_calls_count += 1
+        print("[UnderstandingAgent] Synthesizing the full understanding...", flush=True)
         joined = "\n\n".join(f"[Part {i}]\n{n}" for i, n in enumerate(part_notes, 1))
         return self.call_llm([
             {"role": "system", "content": self.get_system_prompt()},

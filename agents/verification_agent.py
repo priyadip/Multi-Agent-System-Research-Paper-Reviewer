@@ -28,6 +28,7 @@ class VerificationAgent(BaseAgent):
         """Judge coverage and faithfulness of the understanding vs the source notes."""
         self.tool_calls_count = 0
         self.tool_calls_count += 1
+        print("[VerificationAgent] Verifying coverage & faithfulness...", flush=True)
 
         notes = "\n\n".join(f"[Part {i}]\n{n}" for i, n in enumerate(part_notes, 1))
 

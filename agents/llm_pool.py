@@ -97,6 +97,7 @@ class LLMPool:
             if idx in self.down:
                 continue
             name, client, model, extra_body = self.entries[idx]
+            print(f"[LLMPool] calling {name} ({model})...", flush=True)
 
             # Retry THIS provider up to attempts_per_provider times on transient errors.
             for attempt in range(self.attempts_per_provider):
