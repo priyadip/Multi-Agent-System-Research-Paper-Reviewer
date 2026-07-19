@@ -37,12 +37,16 @@ class LLMPool:
     """Round-robin pool of OpenAI-compatible providers with failover."""
 
     def __init__(self, provider_keys: List[Tuple[str, str]],
-                 model_overrides: Dict[str, str] = None):
+                 model_overrides: Dict[str, str] = None, rotate: bool = True):
         """
         Args:
             provider_keys: list of (provider_name, api_key) to include in the pool.
             model_overrides: optional {provider_name: model_id} to override defaults.
+            rotate: True = round-robin across providers (spread load). False = always
+                    try the FIRST provider (primary), only fall through to the next on
+                    failure (primary + fallback).
         """
+        self.rotate = rotate
         from openai import OpenAI
         model_overrides = model_overrides or {}
         self.entries = []  # list of (name, client, model)
@@ -52,10 +56,10 @@ class LLMPool:
             cfg = PROVIDERS[name]
             # max_retries=0: fail fast so the pool's own failover moves to the next
             # provider immediately instead of the SDK sleeping on 429 backoff.
-            # Generous timeout: NVIDIA's free-tier reasoning models can take up to
-            # ~90s. A truly hung request still fails via the circuit breaker.
+            # Timeout tuned so a slow/hung provider fails fast enough to fall back
+            # to the fallback provider without a long stall.
             client = OpenAI(api_key=key, base_url=cfg["base_url"],
-                            max_retries=0, timeout=120.0)
+                            max_retries=0, timeout=60.0)
             model = model_overrides.get(name, cfg["model"])
             extra_body = cfg.get("extra_body")
             self.entries.append((name, client, model, extra_body))
@@ -82,13 +86,13 @@ class LLMPool:
         # retry so free-tier per-minute limits can reset. Permanently-failed
         # providers (payment/model/auth/timeout) are disabled via the circuit breaker.
         for attempt in range(3):
-            checked = 0
             had_transient = False
-            while checked < n:
-                idx = self._i % n
-                self._i += 1
+            # rotate=True: start where we left off (round-robin). rotate=False:
+            # always start at the primary (index 0) and fall through on failure.
+            start = (self._i % n) if self.rotate else 0
+            for step in range(n):
+                idx = (start + step) % n
                 if idx in self.down:
-                    checked += 1
                     continue
                 name, client, model, extra_body = self.entries[idx]
                 try:
@@ -103,11 +107,12 @@ class LLMPool:
                     content = m.content or getattr(m, "reasoning_content", None) \
                         or getattr(m, "reasoning", None)
                     if content:
+                        if self.rotate:
+                            self._i = idx + 1  # next round-robin call moves on
                         return content
-                    # Empty response: treat as a transient failure and rotate.
+                    # Empty response: treat as a transient failure and try next.
                     errors.append(f"{name}: empty response")
                     had_transient = True
-                    checked += 1
                     continue
                 except Exception as e:
                     msg = str(e)
@@ -118,7 +123,6 @@ class LLMPool:
                         self.down.add(idx)
                     else:
                         had_transient = True  # e.g. 429 rate limit
-                    checked += 1
                     continue
 
             # All live providers failed this round. If any were just rate-limited,

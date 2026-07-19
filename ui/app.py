@@ -1090,6 +1090,33 @@ def get_orchestrator(llm_pool):
     return PaperReviewOrchestrator(llm_pool=llm_pool)
 
 
+def build_task_pools(provider_keys, groq_model):
+    """Route each task to a specific provider/model (not round-robin):
+      - Review + Q&A + Memory -> Groq
+      - Understanding (stored in RAG) -> NVIDIA deepseek-v4-pro
+      - Verification -> NVIDIA deepseek-v4-flash
+    Each falls back to the other provider when only one key is supplied.
+    """
+    keys = dict(provider_keys)
+    gk, nk = keys.get("groq"), keys.get("nvidia")
+
+    def pool(order, nvidia_model):
+        """Build a primary+fallback pool (rotate=False) from the given provider order,
+        skipping providers whose key is missing."""
+        entries, overrides = [], {"groq": groq_model, "nvidia": nvidia_model}
+        for name in order:
+            k = gk if name == "groq" else nk
+            if k:
+                entries.append((name, k))
+        return LLMPool(entries, model_overrides=overrides, rotate=False) if entries else None
+
+    # Primary listed first; the other provider is the fallback if the primary fails.
+    general = pool(["groq", "nvidia"], "deepseek-ai/deepseek-v4-flash")        # review, Q&A, memory -> Groq
+    understanding = pool(["nvidia", "groq"], "deepseek-ai/deepseek-v4-pro")    # understanding -> NVIDIA pro
+    verify = pool(["nvidia", "groq"], "deepseek-ai/deepseek-v4-flash")         # verification -> NVIDIA flash
+    return general, understanding, verify
+
+
 @st.cache_resource(show_spinner=False)
 def get_embedder():
     """Load the semantic embedding model once (cached). Returns an embed function,
@@ -1233,8 +1260,12 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-# Build the multi-provider pool from whatever keys were supplied (session-only).
-llm_pool = LLMPool(provider_keys, model_overrides={"groq": selected_model}) if provider_keys else None
+# Build per-task pools (session-only): review/Q&A on Groq, understanding on NVIDIA
+# deepseek-v4-pro, verification on NVIDIA deepseek-v4-flash.
+if provider_keys:
+    general_pool, understanding_pool, verify_pool = build_task_pools(provider_keys, selected_model)
+else:
+    general_pool = understanding_pool = verify_pool = None
 
 # Advanced Architecture Section
 st.markdown(f"""
@@ -1423,7 +1454,7 @@ elif review_button and arxiv_id:
         for idx in range(len(progress_steps)):
             update_step_display(idx, 'pending')
         
-        orchestrator = get_orchestrator(llm_pool)
+        orchestrator = get_orchestrator(general_pool)   # review runs on Groq
         start_time = time.time()
         
         # Execute review with progress updates
@@ -1728,9 +1759,9 @@ if "review_result" in st.session_state:
                 with st.spinner("Reading the whole paper, connecting sections, and verifying coverage… "
                                 "(5–8 LLM calls — spread across your providers to avoid rate limits)"):
                     rag = PaperRAG(embed_fn=get_embedder()).build(learn_text)
-                    ua = UnderstandingAgent(); ua.llm_pool = llm_pool
+                    ua = UnderstandingAgent(); ua.llm_pool = understanding_pool  # NVIDIA deepseek-v4-pro
                     understanding = ua.build_understanding(learn_text, learn_title)
-                    va = VerificationAgent(); va.llm_pool = llm_pool
+                    va = VerificationAgent(); va.llm_pool = verify_pool          # NVIDIA deepseek-v4-flash
                     verification = va.verify(
                         understanding.get('part_notes', []),
                         understanding.get('global_understanding', ''),
@@ -1797,7 +1828,7 @@ if "review_result" in st.session_state:
                     with st.spinner("Retrieving relevant passages and answering…"):
                         chunks = rag.retrieve(user_q, k=4) if rag else []
                         memory = st.session_state.get('learn_memory', '')
-                        tutor = LearningAgent(); tutor.llm_pool = llm_pool
+                        tutor = LearningAgent(); tutor.llm_pool = general_pool   # Q&A on Groq
                         answer = tutor.answer_question(
                             chunks, learn_title, user_q,
                             st.session_state['learn_chat'],
@@ -1805,7 +1836,7 @@ if "review_result" in st.session_state:
                             conversation_memory=memory
                         )
                         # Fold this exchange into the running memory so nothing is forgotten.
-                        mem_agent = MemoryAgent(); mem_agent.llm_pool = llm_pool
+                        mem_agent = MemoryAgent(); mem_agent.llm_pool = general_pool  # memory on Groq
                         st.session_state['learn_memory'] = mem_agent.update(
                             memory, user_q, answer, learn_title
                         )
