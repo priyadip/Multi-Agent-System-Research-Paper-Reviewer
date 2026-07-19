@@ -1201,29 +1201,28 @@ with st.sidebar:
     st.caption("**Groq** runs the review & Q&A (fast). Optional **NVIDIA** keys run the accuracy-critical Learn steps on DeepSeek (retried until they respond). Keys are session-only — never stored.")
 
     groq_key = st.text_input("Groq (review & Q&A)", type="password", placeholder="gsk_…",
-                             key="key_groq", help="Free key: console.groq.com/keys")
+                             key="key_groq")
+    st.caption("🔗 Get a Groq key: [console.groq.com/keys](https://console.groq.com/keys)")
+
     nvidia_key1 = st.text_input("NVIDIA key 1 — Understanding (deepseek-v4-pro)",
-                                type="password", placeholder="nvapi-…",
-                                key="key_nvidia1", help="Free key: build.nvidia.com")
+                                type="password", placeholder="nvapi-…", key="key_nvidia1")
+    st.caption("🔗 Get a key: [build.nvidia.com/deepseek-ai/deepseek-v4-pro](https://build.nvidia.com/deepseek-ai/deepseek-v4-pro)")
+
     nvidia_key2 = st.text_input("NVIDIA key 2 — Verify (deepseek-v4-flash)",
-                                type="password", placeholder="nvapi-…",
-                                key="key_nvidia2", help="Use a second NVIDIA key so Verify doesn't share key 1's rate limit")
+                                type="password", placeholder="nvapi-…", key="key_nvidia2")
+    st.caption("🔗 Get a key: [build.nvidia.com · deepseek-v4-flash](https://build.nvidia.com/models?q=deepseek-v4-flash)")
 
     # At least one key of any kind is required to run.
     provider_keys = [(n, k) for n, k in (
         ("groq", groq_key), ("nvidia1", nvidia_key1), ("nvidia2", nvidia_key2)
     ) if k]
 
-    # Groq model picker (applies to the Groq provider only; others use defaults).
+    # Groq model picker — only the two models available on the Groq account.
+    # (NVIDIA models are fixed per task and use their own endpoint/keys.)
     st.markdown(f"<h3 style='color: {colors['accent']}; margin-top: 1rem;'>🧠 Groq Model</h3>", unsafe_allow_html=True)
     MODEL_OPTIONS = {
         "llama-3.1-8b-instant": "Llama 3.1 8B — fastest (default)",
         "llama-3.3-70b-versatile": "Llama 3.3 70B — best quality",
-        "openai/gpt-oss-120b": "GPT-OSS 120B — large reasoning",
-        "openai/gpt-oss-20b": "GPT-OSS 20B — balanced",
-        "qwen/qwen3.6-27b": "Qwen 3.6 27B",
-        "groq/compound": "Groq Compound — agentic",
-        "groq/compound-mini": "Groq Compound Mini",
     }
     selected_model = st.selectbox(
         "Groq Model",
