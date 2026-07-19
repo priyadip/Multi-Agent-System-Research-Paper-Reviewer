@@ -79,19 +79,24 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Configure your Groq API key
+### 4. Configure your API keys
 
 Create a `.env` file in the project root:
 
 ```env
+# Required — drives the review pipeline and Learn Q&A
 GROQ_API_KEY="gsk_your_key_here"
 MODEL_NAME=llama-3.1-8b-instant
+
+# Optional — accuracy-critical Learn steps on NVIDIA DeepSeek
+NVIDIA_API_KEY="nvapi_your_key_here"
 ```
 
-> Get a free key at the [Groq Console](https://console.groq.com/keys) → **API Keys** → **Create API Key**.
-> Keep your key secret and never commit `.env` to version control (it is already in `.gitignore`).
+> - **Groq (required):** get a free key at the [Groq Console](https://console.groq.com/keys) → **API Keys** → **Create API Key**. It runs the review pipeline and the Learn tab's Q&A.
+> - **NVIDIA (optional):** get a free key at [build.nvidia.com](https://build.nvidia.com). If set, the Learn subsystem routes Understanding to `deepseek-v4-pro` and Verification to `deepseek-v4-flash` (via the multi-provider pool), retrying with backoff and falling back to Groq. Without it, everything runs on Groq. In the UI you can paste **two** NVIDIA keys (one per model) in the sidebar; for local `.env` use, a single `NVIDIA_API_KEY` is enough.
+> - Keep your keys secret and never commit `.env` to version control (it is already in `.gitignore`).
 
-*Note: the hosted Streamlit app does not use `.env` — visitors paste their own key in the sidebar instead.*
+*Note: the hosted Streamlit app does not use `.env` — visitors paste their own key(s) in the sidebar instead.*
 
 ---
 
@@ -134,17 +139,6 @@ python eval/run_eval.py --output eval/eval_results.json
 It reports the **success rate**, a **latency distribution** (mean, median, std, min/max, p95/p99), **tool-call stats**, **constraint violations**, and a **per-agent efficiency profile** (average tool calls + latency per agent), all computed by `eval/metrics.py` from the per-agent metrics the orchestrator records at each node (`report["metrics"]["per_agent"]`).
 
 **Latest run** (8 cases, live Groq free tier): **100% pass, 0 violations, 14 tool calls/review**. Latency averages ~91 s/review, dominated by free-tier rate-limit backoff rather than pipeline cost. The three negative cases — an invalid ID, an empty ID, and a **deliberately fake but real-looking ID** (`2402.99999`) — are all correctly returned as errors rather than hallucinated into reviews.
-
----
-
-## Deploy Your Own (Free)
-
-This app deploys on [Streamlit Community Cloud](https://share.streamlit.io) with no CI/CD setup — it auto-redeploys on every push to `main`:
-
-1. Sign in at [share.streamlit.io](https://share.streamlit.io) with GitHub.
-2. **Create app** → **Deploy from GitHub**.
-3. Repository: this repo &nbsp;·&nbsp; Branch: `main` &nbsp;·&nbsp; Main file: `ui/app.py`.
-4. Deploy. Visitors paste their own Groq key to run reviews.
 
 ---
 
