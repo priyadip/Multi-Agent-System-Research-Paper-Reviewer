@@ -12,8 +12,8 @@ An AI-powered multi-agent system for reviewing academic papers from arXiv. A tea
 - **In-depth analysis** — goes beyond summarization to surface strengths, weaknesses, and concrete suggestions for improvement.
 - **Citation analysis** — counts references in the bibliography and lists in-text citations with the surrounding context.
 - **Learn tab (multi-agent RAG)** — three agents read the *whole* paper: an **Understanding** agent comprehends and connects all sections (map-reduce), a **Verification** agent scores coverage/faithfulness, and a **Tutor** answers follow-up questions grounded in passages retrieved from the entire paper via semantic RAG (with a lexical TF-IDF fallback). Math renders as LaTeX.
-- **Bring your own key(s) & model** — each visitor supplies their own API key(s) for any of **Groq, Google Gemini, Cerebras, OpenRouter, or NVIDIA** and picks the model; nothing is stored server-side.
-- **Multi-provider rotation** — when multiple keys are given, requests round-robin across providers with automatic failover, so no single provider's free-tier rate limit is hit.
+- **Bring your own key(s) & model** — each visitor supplies their own **Groq** and/or **NVIDIA** API key and picks the Groq model; nothing is stored server-side.
+- **Multi-provider rotation** — with both keys, requests round-robin across Groq and NVIDIA with automatic failover (and a circuit breaker for dead providers), so no single provider's free-tier rate limit is hit.
 
 ## Agents
 

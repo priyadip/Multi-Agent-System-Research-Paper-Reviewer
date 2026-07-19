@@ -23,25 +23,12 @@ PROVIDERS: Dict[str, Dict[str, str]] = {
         "model": "llama-3.1-8b-instant",
         "keys_url": "https://console.groq.com/keys",
     },
-    "gemini": {
-        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-        "model": "gemini-2.0-flash",
-        "keys_url": "https://aistudio.google.com/apikey",
-    },
-    "cerebras": {
-        "base_url": "https://api.cerebras.ai/v1",
-        "model": "gpt-oss-120b",
-        "keys_url": "https://cloud.cerebras.ai",
-    },
-    "openrouter": {
-        "base_url": "https://openrouter.ai/api/v1",
-        "model": "google/gemma-4-31b-it:free",
-        "keys_url": "https://openrouter.ai/keys",
-    },
     "nvidia": {
         "base_url": "https://integrate.api.nvidia.com/v1",
-        "model": "meta/llama-3.3-70b-instruct",
+        "model": "deepseek-ai/deepseek-v4-flash",
         "keys_url": "https://build.nvidia.com",
+        # DeepSeek is a reasoning model; disable "thinking" for fast, direct answers.
+        "extra_body": {"chat_template_kwargs": {"thinking": False}},
     },
 }
 
@@ -65,10 +52,13 @@ class LLMPool:
             cfg = PROVIDERS[name]
             # max_retries=0: fail fast so the pool's own failover moves to the next
             # provider immediately instead of the SDK sleeping on 429 backoff.
+            # Generous timeout: NVIDIA's free-tier reasoning models can take up to
+            # ~90s. A truly hung request still fails via the circuit breaker.
             client = OpenAI(api_key=key, base_url=cfg["base_url"],
-                            max_retries=0, timeout=30.0)
+                            max_retries=0, timeout=120.0)
             model = model_overrides.get(name, cfg["model"])
-            self.entries.append((name, client, model))
+            extra_body = cfg.get("extra_body")
+            self.entries.append((name, client, model, extra_body))
         self._i = 0
         self.down = set()  # circuit breaker: indices of providers that failed
 
@@ -77,7 +67,7 @@ class LLMPool:
 
     @property
     def provider_names(self) -> List[str]:
-        return [name for name, _, _ in self.entries]
+        return [entry[0] for entry in self.entries]
 
     def chat(self, messages, temperature: float = 0.7, max_tokens: int = 2048) -> str:
         """Send a chat request, rotating providers and failing over on errors."""
@@ -100,15 +90,25 @@ class LLMPool:
                 if idx in self.down:
                     checked += 1
                     continue
-                name, client, model = self.entries[idx]
+                name, client, model, extra_body = self.entries[idx]
                 try:
-                    resp = client.chat.completions.create(
-                        model=model,
-                        messages=messages,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                    )
-                    return resp.choices[0].message.content
+                    kwargs = dict(model=model, messages=messages,
+                                  temperature=temperature, max_tokens=max_tokens)
+                    if extra_body:
+                        kwargs["extra_body"] = extra_body
+                    resp = client.chat.completions.create(**kwargs)
+                    m = resp.choices[0].message
+                    # Reasoning models (e.g. DeepSeek) may return the answer in
+                    # reasoning_content when content is empty.
+                    content = m.content or getattr(m, "reasoning_content", None) \
+                        or getattr(m, "reasoning", None)
+                    if content:
+                        return content
+                    # Empty response: treat as a transient failure and rotate.
+                    errors.append(f"{name}: empty response")
+                    had_transient = True
+                    checked += 1
+                    continue
                 except Exception as e:
                     msg = str(e)
                     errors.append(f"{name}: {msg[:70]}")

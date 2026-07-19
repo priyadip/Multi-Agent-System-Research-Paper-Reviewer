@@ -1164,24 +1164,16 @@ st.divider()
 # Sidebar
 with st.sidebar:
     st.markdown(f"<h3 style='color: {colors['accent']};'>🔑 API Keys</h3>", unsafe_allow_html=True)
-    st.caption("Paste keys for **one or more** providers. The app rotates across them so no single provider hits its rate limit. Keys are session-only — never stored.")
+    st.caption("Paste a **Groq** and/or **NVIDIA** key. The app rotates across them so no single provider hits its rate limit. Keys are session-only — never stored.")
 
     groq_key = st.text_input("Groq", type="password", placeholder="gsk_…",
                              key="key_groq", help="Free key: console.groq.com/keys")
-    gemini_key = st.text_input("Google Gemini", type="password", placeholder="AIza…",
-                               key="key_gemini", help="Free key: aistudio.google.com/apikey")
-    cerebras_key = st.text_input("Cerebras", type="password", placeholder="csk-…",
-                                 key="key_cerebras", help="Free key: cloud.cerebras.ai")
-    openrouter_key = st.text_input("OpenRouter", type="password", placeholder="sk-or-…",
-                                   key="key_openrouter", help="Free key: openrouter.ai/keys")
     nvidia_key = st.text_input("NVIDIA", type="password", placeholder="nvapi-…",
                                key="key_nvidia", help="Free key: build.nvidia.com")
 
     # Collect the providers the user actually supplied.
     provider_keys = [(name, key) for name, key in (
-        ("groq", groq_key), ("gemini", gemini_key),
-        ("cerebras", cerebras_key), ("openrouter", openrouter_key),
-        ("nvidia", nvidia_key)
+        ("groq", groq_key), ("nvidia", nvidia_key)
     ) if key]
 
     # Groq model picker (applies to the Groq provider only; others use defaults).
@@ -1376,7 +1368,7 @@ progress_steps = [
 
 # Review process with advanced progress tracking
 if review_button and arxiv_id and not provider_keys:
-    st.warning("🔑 Please paste at least one API key (Groq, Gemini, Cerebras, OpenRouter, or NVIDIA) in the sidebar to run the review.")
+    st.warning("🔑 Please paste at least one API key (Groq or NVIDIA) in the sidebar to run the review.")
 elif review_button and arxiv_id:
     # Initialize progress
     st.session_state.progress_data = {step['id']: 'pending' for step in progress_steps}
