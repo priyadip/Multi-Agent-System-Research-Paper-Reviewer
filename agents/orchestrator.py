@@ -34,12 +34,15 @@ class ReviewState(TypedDict):
     cite_output: Dict[str, Any]
     # --- NEW STATE FIELDS ---
     publication_output: Dict[str, Any]
-   
-    
+
+
     final_report: Dict[str, Any]
     error: str
     start_time: float
     end_time: float
+    # Per-agent timing + tool-call metrics, appended by each node as it runs.
+    # Used by the evaluation harness (eval/) to compute real per-agent efficiency.
+    agent_metrics: list
 
 
 class PaperReviewOrchestrator:
@@ -103,10 +106,21 @@ class PaperReviewOrchestrator:
     
     # --- NODE FUNCTIONS ---
 
+    @staticmethod
+    def _record(state: ReviewState, output: Dict[str, Any], t0: float) -> None:
+        """Append this agent's real tool-call count and wall-clock duration."""
+        state.setdefault("agent_metrics", []).append({
+            "agent": output.get("agent", "unknown"),
+            "tool_calls": output.get("tool_calls", 0),
+            "duration": round(time.time() - t0, 3),
+        })
+
     def _reader_node(self, state: ReviewState) -> ReviewState:
         print(f"\n[ReaderAgent] Processing paper: {state['arxiv_id']}")
         input_data = {"arxiv_id": state["arxiv_id"]}
+        t0 = time.time()
         output = self.reader_agent.process(input_data)
+        self._record(state, output, t0)
         state["reader_output"] = output
         if output.get("output", {}).get("status") == "error":
             state["error"] = output["output"]["message"]
@@ -117,9 +131,11 @@ class PaperReviewOrchestrator:
         """Execute Publication Agent"""
         print("\n[PublicationAgent] Searching for venue...")
         if state.get("error"): return state
-        
+
         input_data = {"reader_output": state["reader_output"]}
+        t0 = time.time()
         output = self.publication_agent.process(input_data)
+        self._record(state, output, t0)
         state["publication_output"] = output
         print(f"[PublicationAgent] Tool calls: {output.get('tool_calls', 0)}")
         return state
@@ -130,7 +146,9 @@ class PaperReviewOrchestrator:
         print("\n[MetaReviewerAgent] Analyzing paper quality...")
         if state.get("error"): return state
         input_data = state["reader_output"]["output"]
+        t0 = time.time()
         output = self.meta_reviewer_agent.process(input_data)
+        self._record(state, output, t0)
         state["meta_reviewer_output"] = output
         print(f"[MetaReviewerAgent] Tool calls: {output.get('tool_calls', 0)}")
         return state
@@ -144,7 +162,9 @@ class PaperReviewOrchestrator:
             "reader_output": state["reader_output"],
             "meta_reviewer_output": state["meta_reviewer_output"]
         }
+        t0 = time.time()
         output = self.critic_agent.process(input_data)
+        self._record(state, output, t0)
         state["critic_output"] = output
         print(f"[CriticAgent] Tool calls: {output.get('tool_calls', 0)}")
         return state
@@ -153,7 +173,9 @@ class PaperReviewOrchestrator:
         print("\n[CiteAgent] Analyzing citations...")
         if state.get("error"): return state
         input_data = {"reader_output": state["reader_output"]}
+        t0 = time.time()
         output = self.cite_agent.process(input_data)
+        self._record(state, output, t0)
         state["cite_output"] = output
         print(f"[CiteAgent] Tool calls: {output.get('tool_calls', 0)}")
         return state
@@ -236,7 +258,9 @@ class PaperReviewOrchestrator:
             "metrics": {
                 "total_tool_calls": total_tool_calls,
                 "duration_seconds": state["end_time"] - state["start_time"],
-                "agents_executed": 5  # Now 5 agents (reader, publication, meta_reviewer, critic, cite)
+                "agents_executed": 5,  # reader, publication, meta_reviewer, critic, cite
+                # Real per-agent tool-call + latency breakdown captured by each node.
+                "per_agent": state.get("agent_metrics", [])
             }
         }
         
@@ -260,11 +284,12 @@ class PaperReviewOrchestrator:
             "critic_output": {},
             "cite_output": {},
             "publication_output": {},  # <--- NEW
-            
+
             "final_report": {},
             "error": "",
             "start_time": time.time(),
-            "end_time": 0
+            "end_time": 0,
+            "agent_metrics": []
         }
         
         final_state = self.workflow.invoke(initial_state)

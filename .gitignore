@@ -31,6 +31,9 @@ eval_results.json
 review_*.json
 review_*.md
 
+# --- Report folder: keep locally, never upload ---
+report/
+
 # --- OS / editor cruft ---
 .DS_Store
 Thumbs.db

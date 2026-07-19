@@ -43,8 +43,8 @@ class MetricsCalculator:
             return 0.0
         
         latencies = [r.get("duration", 0) for r in successful]
-        return np.mean(latencies) if latencies else 0.0
-    
+        return float(np.mean(latencies)) if latencies else 0.0
+
     @staticmethod
     def calculate_latency_stats(results: List[Dict[str, Any]]) -> Dict[str, float]:
         """
@@ -70,15 +70,16 @@ class MetricsCalculator:
             }
         
         latencies = [r.get("duration", 0) for r in successful]
-        
+
+        # Cast to plain Python floats so the report is JSON-serializable.
         return {
-            "mean": np.mean(latencies),
-            "median": np.median(latencies),
-            "std": np.std(latencies),
-            "min": np.min(latencies),
-            "max": np.max(latencies),
-            "p95": np.percentile(latencies, 95),
-            "p99": np.percentile(latencies, 99)
+            "mean": float(np.mean(latencies)),
+            "median": float(np.median(latencies)),
+            "std": float(np.std(latencies)),
+            "min": float(np.min(latencies)),
+            "max": float(np.max(latencies)),
+            "p95": float(np.percentile(latencies, 95)),
+            "p99": float(np.percentile(latencies, 99))
         }
     
     @staticmethod
@@ -109,8 +110,8 @@ class MetricsCalculator:
         ]
         
         return {
-            "mean": np.mean(tool_calls),
-            "median": np.median(tool_calls),
+            "mean": float(np.mean(tool_calls)),
+            "median": float(np.median(tool_calls)),
             "min": int(np.min(tool_calls)),
             "max": int(np.max(tool_calls)),
             "total": int(np.sum(tool_calls))
@@ -144,39 +145,39 @@ class MetricsCalculator:
     @staticmethod
     def calculate_agent_efficiency(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Calculate per-agent efficiency metrics.
-        
+        Calculate per-agent efficiency from the real per-agent metrics that the
+        orchestrator records for each run (report["metrics"]["per_agent"]).
+
         Args:
             results: List of test results
-            
+
         Returns:
-            Dictionary with per-agent stats
+            {agent_name: {avg_tool_calls, avg_latency, runs}} averaged over all
+            successful runs. Empty dict if no per-agent data is available.
         """
         successful = [r for r in results if r.get("actual_status") == "success"]
-        
-        if not successful:
-            return {}
-        
-        
-        
-        return {
-            "reader_agent": {
-                "avg_tool_calls": 2.0,
-                "avg_latency": 3.2
-            },
-            "meta_reviewer_agent": {
-                "avg_tool_calls": 3.0,
-                "avg_latency": 8.5
-            },
-            "critic_agent": {
-                "avg_tool_calls": 3.0,
-                "avg_latency": 9.1
-            },
-            "cite_agent": {
-                "avg_tool_calls": 4.7,
-                "avg_latency": 7.5
-            }
-        }
+
+        # Gather each agent's tool-call and latency samples across all runs.
+        samples: Dict[str, Dict[str, List[float]]] = {}
+        for r in successful:
+            per_agent = (
+                r.get("result", {}).get("metrics", {}).get("per_agent", [])
+            )
+            for entry in per_agent:
+                name = entry.get("agent", "unknown")
+                acc = samples.setdefault(name, {"tool_calls": [], "latency": []})
+                acc["tool_calls"].append(entry.get("tool_calls", 0))
+                acc["latency"].append(entry.get("duration", 0.0))
+
+        efficiency = {}
+        for name, acc in samples.items():
+            if acc["tool_calls"]:
+                efficiency[name] = {
+                    "avg_tool_calls": float(np.mean(acc["tool_calls"])),
+                    "avg_latency": float(np.mean(acc["latency"])),
+                    "runs": len(acc["tool_calls"]),
+                }
+        return efficiency
     
     @staticmethod
     def generate_report(results: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -190,7 +191,8 @@ class MetricsCalculator:
             Complete metrics dictionary
         """
         calc = MetricsCalculator()
-        
+
+        passed = sum(1 for r in results if r.get("passed", False))
         return {
             "success_rate": calc.calculate_success_rate(results),
             "latency": calc.calculate_latency_stats(results),
@@ -198,8 +200,8 @@ class MetricsCalculator:
             "constraint_violations": calc.calculate_constraint_violations(results),
             "agent_efficiency": calc.calculate_agent_efficiency(results),
             "total_tests": len(results),
-            "passed_tests": sum(1 for r in results if r.get("passed", False)),
-            "failed_tests": sum(1 for r in results if not r.get("passed", True))
+            "passed_tests": passed,
+            "failed_tests": len(results) - passed
         }
     
     @staticmethod
@@ -248,11 +250,15 @@ class MetricsCalculator:
                 print(f"    - {vtype}: {count}")
         
         print(f"\n Agent Efficiency")
-        for agent, stats in metrics['agent_efficiency'].items():
-            print(f"  {agent}:")
-            print(f"    Avg Tool Calls:   {stats['avg_tool_calls']:.1f}")
-            print(f"    Avg Latency:      {stats['avg_latency']:.1f}s")
-        
+        if metrics['agent_efficiency']:
+            for agent, stats in metrics['agent_efficiency'].items():
+                print(f"  {agent}:")
+                print(f"    Avg Tool Calls:   {stats['avg_tool_calls']:.1f}")
+                print(f"    Avg Latency:      {stats['avg_latency']:.1f}s "
+                      f"(n={stats.get('runs', 0)})")
+        else:
+            print("  (no per-agent data captured)")
+
         print("\n" + "="*70)
 
 

@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "paper-reviewer": {
+      "command": "D:\\Multi-Agent System_ Research Paper Reviewer\\venv\\Scripts\\python.exe",
+      "args": [
+        "D:\\Multi-Agent System_ Research Paper Reviewer\\mcp-server\\server.py"
+      ],
+      "env": {
+        "GROQ_API_KEY": "gsk_put_your_key_here",
+        "MODEL_NAME": "llama-3.1-8b-instant",
+        "NVIDIA_API_KEY": ""
+      }
+    }
+  }
+}
