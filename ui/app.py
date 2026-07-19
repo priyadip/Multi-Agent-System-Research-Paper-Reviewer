@@ -1090,30 +1090,37 @@ def get_orchestrator(llm_pool):
     return PaperReviewOrchestrator(llm_pool=llm_pool)
 
 
-def build_task_pools(provider_keys, groq_model):
-    """Route each task to a specific provider/model (not round-robin):
-      - Review + Q&A + Memory -> Groq
-      - Understanding (stored in RAG) -> NVIDIA deepseek-v4-pro
-      - Verification -> NVIDIA deepseek-v4-flash
-    Each falls back to the other provider when only one key is supplied.
+def build_task_pools(groq_key, nvidia_key1, nvidia_key2, groq_model):
+    """Route each task to a specific provider/model (accuracy-first, not round-robin):
+      - Review + Q&A + Memory -> Groq (fast)
+      - Understanding (stored in RAG) -> NVIDIA key1 + deepseek-v4-pro (retried)
+      - Verification -> NVIDIA key2 + deepseek-v4-flash (retried)
+    Accuracy tasks retry NVIDIA up to 8x (exponential backoff) before falling back to
+    Groq, so a transient 503/404/429 never hard-fails. Missing keys degrade gracefully.
     """
-    keys = dict(provider_keys)
-    gk, nk = keys.get("groq"), keys.get("nvidia")
+    def make_pool(entries, nvidia_model, attempts):
+        if not entries:
+            return None
+        overrides = {"groq": groq_model, "nvidia": nvidia_model}
+        return LLMPool(entries, model_overrides=overrides, rotate=False,
+                       attempts_per_provider=attempts)
 
-    def pool(order, nvidia_model):
-        """Build a primary+fallback pool (rotate=False) from the given provider order,
-        skipping providers whose key is missing."""
-        entries, overrides = [], {"groq": groq_model, "nvidia": nvidia_model}
-        for name in order:
-            k = gk if name == "groq" else nk
-            if k:
-                entries.append((name, k))
-        return LLMPool(entries, model_overrides=overrides, rotate=False) if entries else None
+    # Review / Q&A / Memory: Groq primary (fast); fall back to a NVIDIA key if no Groq.
+    gen_entries = ([("groq", groq_key)] if groq_key else []) + \
+                  ([("nvidia", nvidia_key2 or nvidia_key1)]
+                   if (nvidia_key2 or nvidia_key1) else [])
+    general = make_pool(gen_entries, "deepseek-ai/deepseek-v4-flash", attempts=2)
 
-    # Primary listed first; the other provider is the fallback if the primary fails.
-    general = pool(["groq", "nvidia"], "deepseek-ai/deepseek-v4-flash")        # review, Q&A, memory -> Groq
-    understanding = pool(["nvidia", "groq"], "deepseek-ai/deepseek-v4-pro")    # understanding -> NVIDIA pro
-    verify = pool(["nvidia", "groq"], "deepseek-ai/deepseek-v4-flash")         # verification -> NVIDIA flash
+    # Understanding: NVIDIA key1 + deepseek-v4-pro, retried; Groq as final fallback.
+    und_entries = ([("nvidia", nvidia_key1)] if nvidia_key1 else []) + \
+                  ([("groq", groq_key)] if groq_key else [])
+    understanding = make_pool(und_entries, "deepseek-ai/deepseek-v4-pro", attempts=8)
+
+    # Verification: NVIDIA key2 + deepseek-v4-flash, retried; Groq as final fallback.
+    ver_entries = ([("nvidia", nvidia_key2)] if nvidia_key2 else []) + \
+                  ([("groq", groq_key)] if groq_key else [])
+    verify = make_pool(ver_entries, "deepseek-ai/deepseek-v4-flash", attempts=8)
+
     return general, understanding, verify
 
 
@@ -1191,17 +1198,21 @@ st.divider()
 # Sidebar
 with st.sidebar:
     st.markdown(f"<h3 style='color: {colors['accent']};'>🔑 API Keys</h3>", unsafe_allow_html=True)
-    st.caption("Paste a **Groq** and/or **NVIDIA** key. The app rotates across them so no single provider hits its rate limit. Keys are session-only — never stored.")
+    st.caption("**Groq** runs the review & Q&A (fast). Optional **NVIDIA** keys run the accuracy-critical Learn steps on DeepSeek (retried until they respond). Keys are session-only — never stored.")
 
-    groq_key = st.text_input("Groq", type="password", placeholder="gsk_…",
+    groq_key = st.text_input("Groq (review & Q&A)", type="password", placeholder="gsk_…",
                              key="key_groq", help="Free key: console.groq.com/keys")
-    nvidia_key = st.text_input("NVIDIA", type="password", placeholder="nvapi-…",
-                               key="key_nvidia", help="Free key: build.nvidia.com")
+    nvidia_key1 = st.text_input("NVIDIA key 1 — Understanding (deepseek-v4-pro)",
+                                type="password", placeholder="nvapi-…",
+                                key="key_nvidia1", help="Free key: build.nvidia.com")
+    nvidia_key2 = st.text_input("NVIDIA key 2 — Verify (deepseek-v4-flash)",
+                                type="password", placeholder="nvapi-…",
+                                key="key_nvidia2", help="Use a second NVIDIA key so Verify doesn't share key 1's rate limit")
 
-    # Collect the providers the user actually supplied.
-    provider_keys = [(name, key) for name, key in (
-        ("groq", groq_key), ("nvidia", nvidia_key)
-    ) if key]
+    # At least one key of any kind is required to run.
+    provider_keys = [(n, k) for n, k in (
+        ("groq", groq_key), ("nvidia1", nvidia_key1), ("nvidia2", nvidia_key2)
+    ) if k]
 
     # Groq model picker (applies to the Groq provider only; others use defaults).
     st.markdown(f"<h3 style='color: {colors['accent']}; margin-top: 1rem;'>🧠 Groq Model</h3>", unsafe_allow_html=True)
@@ -1263,7 +1274,8 @@ with st.sidebar:
 # Build per-task pools (session-only): review/Q&A on Groq, understanding on NVIDIA
 # deepseek-v4-pro, verification on NVIDIA deepseek-v4-flash.
 if provider_keys:
-    general_pool, understanding_pool, verify_pool = build_task_pools(provider_keys, selected_model)
+    general_pool, understanding_pool, verify_pool = build_task_pools(
+        groq_key, nvidia_key1, nvidia_key2, selected_model)
 else:
     general_pool = understanding_pool = verify_pool = None
 
@@ -1399,7 +1411,7 @@ progress_steps = [
 
 # Review process with advanced progress tracking
 if review_button and arxiv_id and not provider_keys:
-    st.warning("🔑 Please paste at least one API key (Groq or NVIDIA) in the sidebar to run the review.")
+    st.warning("🔑 Please paste at least one API key (Groq recommended) in the sidebar to run the review.")
 elif review_button and arxiv_id:
     # Initialize progress
     st.session_state.progress_data = {step['id']: 'pending' for step in progress_steps}
@@ -1757,7 +1769,8 @@ if "review_result" in st.session_state:
             # --- Step 1: Build full understanding (RAG + comprehension + verification) ---
             if st.button("🧠 Build full understanding", key="build_understanding_btn", use_container_width=True):
                 with st.spinner("Reading the whole paper, connecting sections, and verifying coverage… "
-                                "(5–8 LLM calls — spread across your providers to avoid rate limits)"):
+                                "Using NVIDIA DeepSeek for accuracy — it retries on busy/rate-limit, "
+                                "so this can take a few minutes (falls back to Groq if needed)."):
                     rag = PaperRAG(embed_fn=get_embedder()).build(learn_text)
                     ua = UnderstandingAgent(); ua.llm_pool = understanding_pool  # NVIDIA deepseek-v4-pro
                     understanding = ua.build_understanding(learn_text, learn_title)

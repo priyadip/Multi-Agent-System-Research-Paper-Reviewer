@@ -12,8 +12,8 @@ An AI-powered multi-agent system for reviewing academic papers from arXiv. A tea
 - **In-depth analysis** — goes beyond summarization to surface strengths, weaknesses, and concrete suggestions for improvement.
 - **Citation analysis** — counts references in the bibliography and lists in-text citations with the surrounding context.
 - **Learn tab (multi-agent RAG)** — three agents read the *whole* paper: an **Understanding** agent comprehends and connects all sections (map-reduce), a **Verification** agent scores coverage/faithfulness, and a **Tutor** answers follow-up questions grounded in passages retrieved from the entire paper via semantic RAG (with a lexical TF-IDF fallback). Math renders as LaTeX.
-- **Bring your own key(s) & model** — each visitor supplies their own **Groq** and/or **NVIDIA** API key and picks the Groq model; nothing is stored server-side.
-- **Multi-provider rotation** — with both keys, requests round-robin across Groq and NVIDIA with automatic failover (and a circuit breaker for dead providers), so no single provider's free-tier rate limit is hit.
+- **Bring your own keys** — Groq runs the review & Q&A (fast); two optional NVIDIA keys run the accuracy-critical Learn steps on DeepSeek. Nothing is stored server-side.
+- **Accuracy-first routing** — Understanding uses NVIDIA `deepseek-v4-pro` (key 1), Verification uses `deepseek-v4-flash` (key 2). These retry with exponential backoff on NVIDIA's transient `503`/`404`/`429` (up to ~8×, since NVIDIA's free tier is ~40 RPM and returns "workers busy") and only fall back to Groq if all retries fail — so a review favours correctness over speed and never hard-fails.
 
 ## Agents
 

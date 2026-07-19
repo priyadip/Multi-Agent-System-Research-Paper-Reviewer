@@ -100,11 +100,14 @@ Multi-Agent-System-Research-Paper-Reviewer/
 - **Bring-your-own key(s) & model** — every agent takes an `api_key`/`model`, or a
   shared `llm_pool`. The Streamlit app passes per-session keys; nothing is stored.
   Falls back to `GROQ_API_KEY` / `MODEL_NAME` env vars for local/CLI use.
-- **Multi-provider pool** (`llm_pool.py`) — Groq and NVIDIA (both OpenAI-compatible)
-  round-robin across whatever keys the user supplies, with fast-fail, a circuit
-  breaker for dead providers, and 429 retry/backoff. Calls are strictly sequential
-  (no parallel calls to any provider). When a pool is set on an agent, `call_llm`
-  routes through it.
+- **Multi-provider pool** (`llm_pool.py`) — Groq and NVIDIA (both OpenAI-compatible).
+  Each task gets its own pool (see `build_task_pools` in `ui/app.py`): Review/Q&A/Memory
+  on Groq; Understanding on NVIDIA `deepseek-v4-pro` (key 1); Verification on NVIDIA
+  `deepseek-v4-flash` (key 2). Accuracy pools set `attempts_per_provider=8` — the pool
+  retries the primary (NVIDIA) with exponential backoff on transient errors
+  (`503`/`404`/`429`/timeout; only `401/402/403` are permanent → circuit breaker) before
+  falling back to Groq. Calls are strictly sequential. When a pool is set on an agent,
+  `call_llm` routes through it.
 - **Never-forget memory** (`memory_agent.py`) — the Learn Q&A keeps a running,
   compressed memory of the whole conversation so earlier context is never dropped.
 - **Rate-limit handling** — `base_agent.call_llm` retries with exponential backoff

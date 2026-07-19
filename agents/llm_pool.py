@@ -37,7 +37,8 @@ class LLMPool:
     """Round-robin pool of OpenAI-compatible providers with failover."""
 
     def __init__(self, provider_keys: List[Tuple[str, str]],
-                 model_overrides: Dict[str, str] = None, rotate: bool = True):
+                 model_overrides: Dict[str, str] = None, rotate: bool = True,
+                 attempts_per_provider: int = 1):
         """
         Args:
             provider_keys: list of (provider_name, api_key) to include in the pool.
@@ -45,8 +46,13 @@ class LLMPool:
             rotate: True = round-robin across providers (spread load). False = always
                     try the FIRST provider (primary), only fall through to the next on
                     failure (primary + fallback).
+            attempts_per_provider: how many times to retry each provider (with
+                    exponential backoff) on TRANSIENT errors (503/429/404/timeout/empty)
+                    before moving to the next provider. Higher = accuracy-first (keep
+                    trying the strong model until it responds).
         """
         self.rotate = rotate
+        self.attempts_per_provider = max(1, attempts_per_provider)
         from openai import OpenAI
         model_overrides = model_overrides or {}
         self.entries = []  # list of (name, client, model)
@@ -74,27 +80,26 @@ class LLMPool:
         return [entry[0] for entry in self.entries]
 
     def chat(self, messages, temperature: float = 0.7, max_tokens: int = 2048) -> str:
-        """Send a chat request, rotating providers and failing over on errors."""
+        """Send a chat request. Providers are tried in order (primary first when
+        rotate=False). Each provider is retried up to `attempts_per_provider` times on
+        TRANSIENT errors (503/429/404/timeout/empty) with exponential backoff before
+        falling through to the next provider. PERMANENT errors (401/402/403) disable a
+        provider via the circuit breaker. Calls are strictly sequential."""
         if not self.entries:
             return "Error: no API providers configured. Paste at least one key."
 
         n = len(self.entries)
         errors = []
+        start = (self._i % n) if self.rotate else 0
 
-        # Up to 3 rounds: each round rotates once through the live providers. If a
-        # round finds every live provider only *rate-limited* (transient), wait and
-        # retry so free-tier per-minute limits can reset. Permanently-failed
-        # providers (payment/model/auth/timeout) are disabled via the circuit breaker.
-        for attempt in range(3):
-            had_transient = False
-            # rotate=True: start where we left off (round-robin). rotate=False:
-            # always start at the primary (index 0) and fall through on failure.
-            start = (self._i % n) if self.rotate else 0
-            for step in range(n):
-                idx = (start + step) % n
-                if idx in self.down:
-                    continue
-                name, client, model, extra_body = self.entries[idx]
+        for step in range(n):
+            idx = (start + step) % n
+            if idx in self.down:
+                continue
+            name, client, model, extra_body = self.entries[idx]
+
+            # Retry THIS provider up to attempts_per_provider times on transient errors.
+            for attempt in range(self.attempts_per_provider):
                 try:
                     kwargs = dict(model=model, messages=messages,
                                   temperature=temperature, max_tokens=max_tokens)
@@ -110,26 +115,22 @@ class LLMPool:
                         if self.rotate:
                             self._i = idx + 1  # next round-robin call moves on
                         return content
-                    # Empty response: treat as a transient failure and try next.
-                    errors.append(f"{name}: empty response")
-                    had_transient = True
-                    continue
+                    errors.append(f"{name}: empty response")  # transient
                 except Exception as e:
                     msg = str(e)
                     errors.append(f"{name}: {msg[:70]}")
-                    permanent = (any(c in msg for c in ("401", "402", "403", "404"))
-                                 or "timed out" in msg.lower() or "timeout" in msg.lower())
-                    if permanent:
+                    # Only auth/payment errors are permanent. NVIDIA's 404 (model
+                    # briefly unavailable), 503 (workers busy), 429 (rate limit) and
+                    # timeouts are all transient and worth retrying.
+                    if any(c in msg for c in ("401", "402", "403")):
                         self.down.add(idx)
-                    else:
-                        had_transient = True  # e.g. 429 rate limit
-                    continue
+                        break  # don't retry a permanently-failed provider
+                # Transient failure: back off, then retry the same provider.
+                if attempt < self.attempts_per_provider - 1:
+                    wait = min(25.0, 2.0 * (1.6 ** attempt))  # 2, 3.2, 5.1, ... cap 25s
+                    print(f"[LLMPool] {name} transient failure; retry "
+                          f"{attempt + 2}/{self.attempts_per_provider} in {wait:.0f}s")
+                    time.sleep(wait)
+            # Exhausted this provider's attempts (or it was disabled) -> next provider.
 
-            # All live providers failed this round. If any were just rate-limited,
-            # back off and try again (limits reset over ~a minute).
-            if had_transient and attempt < 2:
-                time.sleep(15 * (attempt + 1))  # 15s, then 30s
-                continue
-            break
-
-        return "Error: all providers failed — " + " | ".join(errors[:5])
+        return "Error: all providers failed — " + " | ".join(errors[-5:])
