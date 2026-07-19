@@ -10,6 +10,7 @@ All four providers expose an OpenAI-compatible Chat Completions API, so a single
 `openai` client (with a per-provider base_url) works for all of them.
 """
 
+import time
 from typing import List, Tuple, Dict
 
 
@@ -29,12 +30,12 @@ PROVIDERS: Dict[str, Dict[str, str]] = {
     },
     "cerebras": {
         "base_url": "https://api.cerebras.ai/v1",
-        "model": "llama-3.3-70b",
+        "model": "gpt-oss-120b",
         "keys_url": "https://cloud.cerebras.ai",
     },
     "openrouter": {
         "base_url": "https://openrouter.ai/api/v1",
-        "model": "meta-llama/llama-3.3-70b-instruct:free",
+        "model": "google/gemma-4-31b-it:free",
         "keys_url": "https://openrouter.ai/keys",
     },
     "nvidia": {
@@ -62,10 +63,14 @@ class LLMPool:
             if not key or name not in PROVIDERS:
                 continue
             cfg = PROVIDERS[name]
-            client = OpenAI(api_key=key, base_url=cfg["base_url"])
+            # max_retries=0: fail fast so the pool's own failover moves to the next
+            # provider immediately instead of the SDK sleeping on 429 backoff.
+            client = OpenAI(api_key=key, base_url=cfg["base_url"],
+                            max_retries=0, timeout=30.0)
             model = model_overrides.get(name, cfg["model"])
             self.entries.append((name, client, model))
         self._i = 0
+        self.down = set()  # circuit breaker: indices of providers that failed
 
     def __bool__(self):
         return len(self.entries) > 0
@@ -81,21 +86,46 @@ class LLMPool:
 
         n = len(self.entries)
         errors = []
-        # Try up to 2 full rotations so a transient rate limit can recover.
-        for _ in range(n * 2):
-            name, client, model = self.entries[self._i % n]
-            self._i += 1
-            try:
-                resp = client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
-                return resp.choices[0].message.content
-            except Exception as e:
-                # Any failure (rate limit, bad model, network) -> try next provider.
-                errors.append(f"{name}: {str(e)[:70]}")
-                continue
 
-        return "Error: all providers failed — " + " | ".join(errors[:4])
+        # Up to 3 rounds: each round rotates once through the live providers. If a
+        # round finds every live provider only *rate-limited* (transient), wait and
+        # retry so free-tier per-minute limits can reset. Permanently-failed
+        # providers (payment/model/auth/timeout) are disabled via the circuit breaker.
+        for attempt in range(3):
+            checked = 0
+            had_transient = False
+            while checked < n:
+                idx = self._i % n
+                self._i += 1
+                if idx in self.down:
+                    checked += 1
+                    continue
+                name, client, model = self.entries[idx]
+                try:
+                    resp = client.chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                    )
+                    return resp.choices[0].message.content
+                except Exception as e:
+                    msg = str(e)
+                    errors.append(f"{name}: {msg[:70]}")
+                    permanent = (any(c in msg for c in ("401", "402", "403", "404"))
+                                 or "timed out" in msg.lower() or "timeout" in msg.lower())
+                    if permanent:
+                        self.down.add(idx)
+                    else:
+                        had_transient = True  # e.g. 429 rate limit
+                    checked += 1
+                    continue
+
+            # All live providers failed this round. If any were just rate-limited,
+            # back off and try again (limits reset over ~a minute).
+            if had_transient and attempt < 2:
+                time.sleep(15 * (attempt + 1))  # 15s, then 30s
+                continue
+            break
+
+        return "Error: all providers failed — " + " | ".join(errors[:5])
