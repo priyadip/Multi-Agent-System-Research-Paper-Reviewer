@@ -143,7 +143,7 @@ RETRIEVED CONTEXT (passages from the paper most relevant to this question):
 
         messages.append({"role": "user", "content": question})
 
-        return self.call_llm(messages, temperature=0.5)
+        return self.call_llm(messages, temperature=0.5, max_tokens=3072)
 
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """Standard entry point (satisfies BaseAgent); returns an explanation."""

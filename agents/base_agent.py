@@ -49,20 +49,24 @@ class BaseAgent(ABC):
         self.llm_pool = None
         self.tool_calls_count = 0
         
-    def call_llm(self, messages: List[Dict[str, str]], temperature: float = 0.7) -> str:
+    def call_llm(self, messages: List[Dict[str, str]], temperature: float = 0.7,
+                 max_tokens: int = 2048) -> str:
         """
-        Call the Groq LLM API.
-        
+        Call the LLM (via the multi-provider pool if set, else the Groq client).
+
         Args:
             messages: List of message dictionaries
             temperature: Sampling temperature
-            
+            max_tokens: Max output tokens (raise for long outputs like the full
+                        understanding synthesis, which otherwise truncates mid-text).
+
         Returns:
             LLM response text
         """
         # Prefer the multi-provider pool when configured (spreads load + failover).
         if self.llm_pool:
-            return self.llm_pool.chat(messages, temperature=temperature)
+            return self.llm_pool.chat(messages, temperature=temperature,
+                                      max_tokens=max_tokens)
 
         if self.client is None:
             return "Error: No Groq API key provided. Please paste your Groq API key to run the review."
@@ -74,7 +78,7 @@ class BaseAgent(ABC):
                     model=self.model,
                     messages=messages,
                     temperature=temperature,
-                    max_tokens=2048
+                    max_tokens=max_tokens
                 )
                 return response.choices[0].message.content
             except Exception as e:

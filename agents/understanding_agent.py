@@ -54,7 +54,7 @@ Part {i}:
 \"\"\"
 {seg}
 \"\"\""""}
-            ], temperature=0.3)
+            ], temperature=0.3, max_tokens=3072)
             notes.append(resp)
         return notes
 
@@ -80,7 +80,7 @@ connects all parts. Use these sections:
 
 Per-part notes:
 {joined}"""}
-        ], temperature=0.35)
+        ], temperature=0.35, max_tokens=8192)
 
     def build_understanding(self, full_text: str, title: str = "") -> Dict[str, Any]:
         """Run the full map-reduce comprehension over the whole paper."""
