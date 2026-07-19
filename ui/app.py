@@ -1174,11 +1174,14 @@ with st.sidebar:
                                  key="key_cerebras", help="Free key: cloud.cerebras.ai")
     openrouter_key = st.text_input("OpenRouter", type="password", placeholder="sk-or-…",
                                    key="key_openrouter", help="Free key: openrouter.ai/keys")
+    nvidia_key = st.text_input("NVIDIA", type="password", placeholder="nvapi-…",
+                               key="key_nvidia", help="Free key: build.nvidia.com")
 
     # Collect the providers the user actually supplied.
     provider_keys = [(name, key) for name, key in (
         ("groq", groq_key), ("gemini", gemini_key),
-        ("cerebras", cerebras_key), ("openrouter", openrouter_key)
+        ("cerebras", cerebras_key), ("openrouter", openrouter_key),
+        ("nvidia", nvidia_key)
     ) if key]
 
     # Groq model picker (applies to the Groq provider only; others use defaults).
@@ -1373,7 +1376,7 @@ progress_steps = [
 
 # Review process with advanced progress tracking
 if review_button and arxiv_id and not provider_keys:
-    st.warning("🔑 Please paste at least one API key (Groq, Gemini, Cerebras, or OpenRouter) in the sidebar to run the review.")
+    st.warning("🔑 Please paste at least one API key (Groq, Gemini, Cerebras, OpenRouter, or NVIDIA) in the sidebar to run the review.")
 elif review_button and arxiv_id:
     # Initialize progress
     st.session_state.progress_data = {step['id']: 'pending' for step in progress_steps}

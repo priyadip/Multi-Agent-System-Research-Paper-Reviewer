@@ -37,6 +37,11 @@ PROVIDERS: Dict[str, Dict[str, str]] = {
         "model": "meta-llama/llama-3.3-70b-instruct:free",
         "keys_url": "https://openrouter.ai/keys",
     },
+    "nvidia": {
+        "base_url": "https://integrate.api.nvidia.com/v1",
+        "model": "meta/llama-3.3-70b-instruct",
+        "keys_url": "https://build.nvidia.com",
+    },
 }
 
 

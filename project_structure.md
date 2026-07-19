@@ -100,8 +100,8 @@ Multi-Agent-System-Research-Paper-Reviewer/
 - **Bring-your-own key(s) & model** — every agent takes an `api_key`/`model`, or a
   shared `llm_pool`. The Streamlit app passes per-session keys; nothing is stored.
   Falls back to `GROQ_API_KEY` / `MODEL_NAME` env vars for local/CLI use.
-- **Multi-provider pool** (`llm_pool.py`) — Groq, Gemini, Cerebras, and OpenRouter
-  are all OpenAI-compatible, so one client (per-provider base URL) round-robins
+- **Multi-provider pool** (`llm_pool.py`) — Groq, Gemini, Cerebras, OpenRouter, and
+  NVIDIA are all OpenAI-compatible, so one client (per-provider base URL) round-robins
   across whatever keys the user supplies, failing over on rate limits. When a pool
   is set on an agent, `call_llm` routes through it.
 - **Never-forget memory** (`memory_agent.py`) — the Learn Q&A keeps a running,
