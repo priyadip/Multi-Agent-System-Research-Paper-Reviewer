@@ -5,6 +5,10 @@
 
 An AI-powered multi-agent system for reviewing academic papers from arXiv. A team of specialized agents, orchestrated with **LangGraph** and powered by **Groq** LLMs, reads a paper and produces a structured review: a summary, a quality assessment, a critical analysis, and a citation breakdown.
 
+<p align="center">
+  <img src="assets/architecture.gif" alt="System architecture: Review pipeline and Learn mode sharing a multi-provider LLM pool" width="820">
+</p>
+
 ## Features
 
 - **Multi-agent architecture**: specialized agents for reading, meta-review, critique, and citation analysis, coordinated by a LangGraph workflow.
