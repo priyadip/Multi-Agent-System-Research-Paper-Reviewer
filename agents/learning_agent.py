@@ -13,11 +13,16 @@ from .base_agent import BaseAgent
 # Rules that keep the model's math renderable by Streamlit's KaTeX engine.
 MATH_FORMATTING_RULES = r"""MATH FORMATTING RULES (the app renders with KaTeX — follow these exactly):
 - Inline math: wrap in single dollars, e.g. $a^2 + b^2 = c^2$.
-- Display math: wrap in double dollars on their own lines, e.g. $$E = mc^2$$.
+- IMPORTANT: put any non-trivial equation on its OWN LINE in DISPLAY math ($$ ... $$),
+  not inline. e.g.
+  $$\ell(i,j) = -\log \frac{\exp(\mathrm{sim}(z_i,z_j)/\tau)}{\sum_{k=1}^{2N} \mathbb{1}_{[k \neq i]}\,\exp(\mathrm{sim}(z_i,z_k)/\tau)}$$
+- ALWAYS write fractions with \frac{numerator}{denominator}. NEVER write a fraction
+  linearly as a/b for an important formula (it renders cramped and unreadable).
+- Use \sum_{k=1}^{2N} for sums (with proper sub/superscripts), \mathrm{sim} for
+  multi-letter operators, \tau for temperature, z_i / z_j for subscripts.
 - Do NOT use \[ \], \( \), \begin{align}, \begin{equation}, or proof/theorem environments.
 - For multi-line derivations or proofs, use aligned inside display math:
   $$\begin{aligned} x &= a + b \\ &= c \end{aligned}$$
-- Use \frac, \sum, \int, \prod, \sqrt, \mathbf, \mathbb, \hat, subscripts (_) and superscripts (^) normally.
 - Every equation must be wrapped in $...$ or $$...$$ so it renders."""
 
 
@@ -89,22 +94,27 @@ Paper text (may be truncated / imperfectly extracted from PDF):
 
     def answer_question(self, retrieved_chunks: List[str], title: str, question: str,
                         history: List[Tuple[str, str]] = None,
-                        global_understanding: str = "") -> str:
+                        global_understanding: str = "",
+                        conversation_memory: str = "") -> str:
         """
         Answer a learner's question using RAG context: the chunks retrieved from
-        the whole paper for this question, plus the verified global understanding.
+        the whole paper for this question, the verified global understanding, and
+        the running conversation memory (so nothing discussed earlier is forgotten).
         Undergraduate level, with LaTeX for math.
         """
         self.tool_calls_count += 1
 
         context = "\n\n---\n\n".join(retrieved_chunks or [])
         understanding = (global_understanding or "")[:4000]
+        memory = (conversation_memory or "")[:3000]
 
         messages = [
             {"role": "system", "content": f"""You are a friendly tutor helping an undergraduate understand this research
 paper. Answer questions clearly with intuition and analogies. Ground your answer in
 the RETRIEVED CONTEXT and the paper understanding below; if they don't cover
-something, use your general knowledge and say so explicitly.
+something, use your general knowledge and say so explicitly. Use the CONVERSATION
+MEMORY to stay consistent with everything already covered — do not contradict or
+forget it.
 
 {MATH_FORMATTING_RULES}
 
@@ -113,6 +123,11 @@ Paper title: {title}
 PAPER UNDERSTANDING (overview of the whole paper):
 \"\"\"
 {understanding}
+\"\"\"
+
+CONVERSATION MEMORY (everything the learner has covered so far — never forget this):
+\"\"\"
+{memory or '(nothing yet)'}
 \"\"\"
 
 RETRIEVED CONTEXT (passages from the paper most relevant to this question):

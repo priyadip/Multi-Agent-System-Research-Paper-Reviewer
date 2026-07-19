@@ -43,6 +43,10 @@ class BaseAgent(ABC):
         key = api_key or os.getenv("GROQ_API_KEY")
         # Client is None when no key is available; call_llm handles that gracefully.
         self.client = Groq(api_key=key) if key else None
+        # Optional multi-provider pool. When set (by the orchestrator/UI), call_llm
+        # routes through it (round-robin + failover across providers) instead of the
+        # single Groq client. See agents/llm_pool.py.
+        self.llm_pool = None
         self.tool_calls_count = 0
         
     def call_llm(self, messages: List[Dict[str, str]], temperature: float = 0.7) -> str:
@@ -56,6 +60,10 @@ class BaseAgent(ABC):
         Returns:
             LLM response text
         """
+        # Prefer the multi-provider pool when configured (spreads load + failover).
+        if self.llm_pool:
+            return self.llm_pool.chat(messages, temperature=temperature)
+
         if self.client is None:
             return "Error: No Groq API key provided. Please paste your Groq API key to run the review."
 

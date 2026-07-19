@@ -4,6 +4,7 @@
 # Control blocks on a fresh install (ImportError: DLL load failed _xxhash).
 
 # Core dependencies
+openai                     # OpenAI-compatible client for the multi-provider pool (Groq/Gemini/Cerebras/OpenRouter)
 langgraph==0.2.62
 langchain==0.3.14
 langchain-community==0.3.14

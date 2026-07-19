@@ -12,7 +12,9 @@ from .publication_agent import PublicationAgent
 from .learning_agent import LearningAgent
 from .understanding_agent import UnderstandingAgent
 from .verification_agent import VerificationAgent
+from .memory_agent import MemoryAgent
 from .rag_store import PaperRAG
+from .llm_pool import LLMPool, PROVIDERS
 
 
 __all__ = [
@@ -26,5 +28,8 @@ __all__ = [
     'LearningAgent',
     'UnderstandingAgent',
     'VerificationAgent',
-    'PaperRAG'
+    'MemoryAgent',
+    'PaperRAG',
+    'LLMPool',
+    'PROVIDERS'
 ]

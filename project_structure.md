@@ -76,7 +76,9 @@ Multi-Agent-System-Research-Paper-Reviewer/
 │   ├── learning_agent.py        # Tutor: undergrad explanations + RAG Q&A
 │   ├── understanding_agent.py   # Whole-paper comprehension (map-reduce)
 │   ├── verification_agent.py    # Coverage/faithfulness judge
-│   └── rag_store.py             # PaperRAG: chunk + embed + retrieve
+│   ├── memory_agent.py          # Running conversation memory (never forget)
+│   ├── rag_store.py             # PaperRAG: chunk + embed + retrieve
+│   └── llm_pool.py              # Multi-provider round-robin + failover
 ├── ui/
 │   └── app.py                   # Streamlit UI (review + Learn tab)
 ├── eval/
@@ -95,10 +97,15 @@ Multi-Agent-System-Research-Paper-Reviewer/
 
 ## Key Design Points
 
-- **Bring-your-own key & model** — every agent takes an `api_key` and `model` at
-  construction. The Streamlit app passes the visitor's pasted key and chosen model
-  per session; nothing is stored server-side. Falls back to `GROQ_API_KEY` /
-  `MODEL_NAME` env vars for local/CLI use.
+- **Bring-your-own key(s) & model** — every agent takes an `api_key`/`model`, or a
+  shared `llm_pool`. The Streamlit app passes per-session keys; nothing is stored.
+  Falls back to `GROQ_API_KEY` / `MODEL_NAME` env vars for local/CLI use.
+- **Multi-provider pool** (`llm_pool.py`) — Groq, Gemini, Cerebras, and OpenRouter
+  are all OpenAI-compatible, so one client (per-provider base URL) round-robins
+  across whatever keys the user supplies, failing over on rate limits. When a pool
+  is set on an agent, `call_llm` routes through it.
+- **Never-forget memory** (`memory_agent.py`) — the Learn Q&A keeps a running,
+  compressed memory of the whole conversation so earlier context is never dropped.
 - **Rate-limit handling** — `base_agent.call_llm` retries with exponential backoff
   on Groq `429` errors (important for the Learn pipeline's multiple calls).
 - **RAG without an embeddings API** — Groq serves no embedding model, so `PaperRAG`

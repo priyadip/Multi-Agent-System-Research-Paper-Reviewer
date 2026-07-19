@@ -45,7 +45,7 @@ class ReviewState(TypedDict):
 class PaperReviewOrchestrator:
     """Orchestrates the multi-agent paper review workflow."""
     
-    def __init__(self, api_key: str = None, model: str = None):
+    def __init__(self, api_key: str = None, model: str = None, llm_pool=None):
         """Initialize the orchestrator with all agents.
 
         Args:
@@ -55,6 +55,8 @@ class PaperReviewOrchestrator:
             model:   Groq model id to use for every agent (e.g.
                      "llama-3.3-70b-versatile"). Falls back to the MODEL_NAME env
                      var, then to llama-3.1-8b-instant, when omitted.
+            llm_pool: optional LLMPool for multi-provider round-robin + failover.
+                     When provided it takes precedence over api_key/model.
         """
         self.reader_agent = ReaderAgent(api_key=api_key, model=model)
         self.meta_reviewer_agent = MetaReviewerAgent(api_key=api_key, model=model)
@@ -62,6 +64,12 @@ class PaperReviewOrchestrator:
         self.cite_agent = CiteAgent(api_key=api_key, model=model)
         # --- INITIALIZE NEW AGENTS ---
         self.publication_agent = PublicationAgent(api_key=api_key, model=model)
+
+        # Route every agent through the shared multi-provider pool when given.
+        if llm_pool:
+            for agent in (self.reader_agent, self.meta_reviewer_agent,
+                          self.critic_agent, self.cite_agent, self.publication_agent):
+                agent.llm_pool = llm_pool
         
         
         # Build the workflow graph

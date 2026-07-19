@@ -18,7 +18,9 @@ from agents.orchestrator import PaperReviewOrchestrator
 from agents.learning_agent import LearningAgent
 from agents.understanding_agent import UnderstandingAgent
 from agents.verification_agent import VerificationAgent
+from agents.memory_agent import MemoryAgent
 from agents.rag_store import PaperRAG
+from agents.llm_pool import LLMPool
 
 # Helper function to convert markdown to HTML
 def markdown_to_html(text):
@@ -1084,8 +1086,8 @@ st.markdown(f"""
 # Initialize orchestrator.
 # NOT cached: it is built fresh per review with the visitor's own API key, which
 # must never persist on the shared server (st.cache_resource is global to all users).
-def get_orchestrator(api_key, model=None):
-    return PaperReviewOrchestrator(api_key=api_key, model=model)
+def get_orchestrator(llm_pool):
+    return PaperReviewOrchestrator(llm_pool=llm_pool)
 
 
 @st.cache_resource(show_spinner=False)
@@ -1161,21 +1163,26 @@ st.divider()
 
 # Sidebar
 with st.sidebar:
-    st.markdown(f"<h3 style='color: {colors['accent']};'>🔑 Groq API Key</h3>", unsafe_allow_html=True)
-    groq_key = st.text_input(
-        "Groq API Key",
-        type="password",
-        label_visibility="collapsed",
-        placeholder="gsk_...",
-        key="groq_key_input",
-        help="Your key is used only for this session and is never stored or logged."
-    )
-    st.caption("🔒 Used only for this session — never stored. Get a free key at [console.groq.com](https://console.groq.com/keys).")
-    if groq_key and not groq_key.startswith("gsk_"):
-        st.warning("That doesn't look like a Groq key (they start with `gsk_`).")
+    st.markdown(f"<h3 style='color: {colors['accent']};'>🔑 API Keys</h3>", unsafe_allow_html=True)
+    st.caption("Paste keys for **one or more** providers. The app rotates across them so no single provider hits its rate limit. Keys are session-only — never stored.")
 
-    # Model picker — visitor chooses which Groq model runs the review.
-    st.markdown(f"<h3 style='color: {colors['accent']}; margin-top: 1rem;'>🧠 Model</h3>", unsafe_allow_html=True)
+    groq_key = st.text_input("Groq", type="password", placeholder="gsk_…",
+                             key="key_groq", help="Free key: console.groq.com/keys")
+    gemini_key = st.text_input("Google Gemini", type="password", placeholder="AIza…",
+                               key="key_gemini", help="Free key: aistudio.google.com/apikey")
+    cerebras_key = st.text_input("Cerebras", type="password", placeholder="csk-…",
+                                 key="key_cerebras", help="Free key: cloud.cerebras.ai")
+    openrouter_key = st.text_input("OpenRouter", type="password", placeholder="sk-or-…",
+                                   key="key_openrouter", help="Free key: openrouter.ai/keys")
+
+    # Collect the providers the user actually supplied.
+    provider_keys = [(name, key) for name, key in (
+        ("groq", groq_key), ("gemini", gemini_key),
+        ("cerebras", cerebras_key), ("openrouter", openrouter_key)
+    ) if key]
+
+    # Groq model picker (applies to the Groq provider only; others use defaults).
+    st.markdown(f"<h3 style='color: {colors['accent']}; margin-top: 1rem;'>🧠 Groq Model</h3>", unsafe_allow_html=True)
     MODEL_OPTIONS = {
         "llama-3.1-8b-instant": "Llama 3.1 8B — fastest (default)",
         "llama-3.3-70b-versatile": "Llama 3.3 70B — best quality",
@@ -1186,14 +1193,15 @@ with st.sidebar:
         "groq/compound-mini": "Groq Compound Mini",
     }
     selected_model = st.selectbox(
-        "Model",
+        "Groq Model",
         options=list(MODEL_OPTIONS.keys()),
         format_func=lambda mid: MODEL_OPTIONS[mid],
         label_visibility="collapsed",
         key="model_select",
-        help="All agents use this Groq model. Larger models give better reviews but are slower and use more tokens."
+        help="Model used for the Groq provider. Other providers use their own default model."
     )
-    st.caption(f"Selected: `{selected_model}`")
+    active = ", ".join(n for n, _ in provider_keys) or "none"
+    st.caption(f"Active providers: **{active}**")
     st.divider()
 
     st.markdown(f"<h3 style='color: {colors['accent']};'>🎯 Quick Access</h3>", unsafe_allow_html=True)
@@ -1229,6 +1237,9 @@ with st.sidebar:
     </ul>
     </div>
     """, unsafe_allow_html=True)
+
+# Build the multi-provider pool from whatever keys were supplied (session-only).
+llm_pool = LLMPool(provider_keys, model_overrides={"groq": selected_model}) if provider_keys else None
 
 # Advanced Architecture Section
 st.markdown(f"""
@@ -1361,8 +1372,8 @@ progress_steps = [
 ]
 
 # Review process with advanced progress tracking
-if review_button and arxiv_id and not groq_key:
-    st.warning("🔑 Please paste your Groq API key in the sidebar to run the review.")
+if review_button and arxiv_id and not provider_keys:
+    st.warning("🔑 Please paste at least one API key (Groq, Gemini, Cerebras, or OpenRouter) in the sidebar to run the review.")
 elif review_button and arxiv_id:
     # Initialize progress
     st.session_state.progress_data = {step['id']: 'pending' for step in progress_steps}
@@ -1417,7 +1428,7 @@ elif review_button and arxiv_id:
         for idx in range(len(progress_steps)):
             update_step_display(idx, 'pending')
         
-        orchestrator = get_orchestrator(groq_key, selected_model)
+        orchestrator = get_orchestrator(llm_pool)
         start_time = time.time()
         
         # Execute review with progress updates
@@ -1712,19 +1723,19 @@ if "review_result" in st.session_state:
         learn_text = result.get('full_text', '') or result['summary'].get('abstract', '')
         learn_title = result.get('paper_title', '')
 
-        if not groq_key:
-            st.info("🔑 Paste your Groq API key in the sidebar to use the Learn feature.")
+        if not provider_keys:
+            st.info("🔑 Paste at least one API key in the sidebar to use the Learn feature.")
         elif not learn_text:
             st.warning("No paper text was extracted, so there's nothing to learn for this paper.")
         else:
             # --- Step 1: Build full understanding (RAG + comprehension + verification) ---
             if st.button("🧠 Build full understanding", key="build_understanding_btn", use_container_width=True):
                 with st.spinner("Reading the whole paper, connecting sections, and verifying coverage… "
-                                "(5–8 LLM calls — may take a minute, and longer on the free tier due to rate limits)"):
+                                "(5–8 LLM calls — spread across your providers to avoid rate limits)"):
                     rag = PaperRAG(embed_fn=get_embedder()).build(learn_text)
-                    ua = UnderstandingAgent(api_key=groq_key, model=selected_model)
+                    ua = UnderstandingAgent(); ua.llm_pool = llm_pool
                     understanding = ua.build_understanding(learn_text, learn_title)
-                    va = VerificationAgent(api_key=groq_key, model=selected_model)
+                    va = VerificationAgent(); va.llm_pool = llm_pool
                     verification = va.verify(
                         understanding.get('part_notes', []),
                         understanding.get('global_understanding', ''),
@@ -1734,6 +1745,7 @@ if "review_result" in st.session_state:
                     st.session_state['understanding'] = understanding
                     st.session_state['verification'] = verification
                     st.session_state['learn_chat'] = []
+                    st.session_state['learn_memory'] = ''
 
             if st.session_state.get('understanding'):
                 understanding = st.session_state['understanding']
@@ -1772,6 +1784,10 @@ if "review_result" in st.session_state:
                     with st.chat_message(role):
                         st.markdown(normalize_latex(msg))
 
+                if st.session_state.get('learn_memory'):
+                    with st.expander("🧠 Session memory (what the tutor remembers)", expanded=False):
+                        st.markdown(normalize_latex(st.session_state['learn_memory']))
+
                 # st.chat_input can't live inside tabs, so use a form instead.
                 with st.form(key="learn_qa_form", clear_on_submit=True):
                     user_q = st.text_input(
@@ -1785,11 +1801,18 @@ if "review_result" in st.session_state:
                     st.session_state['learn_chat'].append(("user", user_q))
                     with st.spinner("Retrieving relevant passages and answering…"):
                         chunks = rag.retrieve(user_q, k=4) if rag else []
-                        tutor = LearningAgent(api_key=groq_key, model=selected_model)
+                        memory = st.session_state.get('learn_memory', '')
+                        tutor = LearningAgent(); tutor.llm_pool = llm_pool
                         answer = tutor.answer_question(
                             chunks, learn_title, user_q,
                             st.session_state['learn_chat'],
-                            understanding.get('global_understanding', '')
+                            understanding.get('global_understanding', ''),
+                            conversation_memory=memory
+                        )
+                        # Fold this exchange into the running memory so nothing is forgotten.
+                        mem_agent = MemoryAgent(); mem_agent.llm_pool = llm_pool
+                        st.session_state['learn_memory'] = mem_agent.update(
+                            memory, user_q, answer, learn_title
                         )
                     st.session_state['learn_chat'].append(("assistant", answer))
                     st.rerun()
@@ -1898,7 +1921,7 @@ if "review_result" in st.session_state:
             if 'progress_data' in st.session_state:
                 st.session_state.progress_data = {}
             # Reset Learn tab state for the next paper
-            for _k in ('paper_explanation', 'rag', 'understanding', 'verification'):
+            for _k in ('paper_explanation', 'rag', 'understanding', 'verification', 'learn_memory'):
                 st.session_state.pop(_k, None)
             st.session_state['learn_chat'] = []
             st.rerun()
