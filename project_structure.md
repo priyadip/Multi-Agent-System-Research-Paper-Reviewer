@@ -25,12 +25,12 @@ arXiv ID
 └──────────┘   └─────────────┘   └──────────────┘   └────────┘   └────────┘   └──────────┘
 ```
 
-- **Reader** — fetches arXiv metadata, downloads the PDF, extracts full text.
-- **Publication** — placeholder (venue detection paused); kept so the graph stays intact.
-- **MetaReviewer** — methodology + contribution assessment, overall review.
-- **Critic** — strengths, weaknesses, suggested improvements.
-- **Cite** — counts bibliography references and lists in-text citations with context.
-- **Finalize** — compiles everything into one JSON report.
+- **Reader**: fetches arXiv metadata, downloads the PDF, extracts full text.
+- **Publication**: placeholder (venue detection paused); kept so the graph stays intact.
+- **MetaReviewer**: methodology + contribution assessment, overall review.
+- **Critic**: strengths, weaknesses, suggested improvements.
+- **Cite**: counts bibliography references and lists in-text citations with context.
+- **Finalize**: compiles everything into one JSON report.
 
 Each node times itself and records `{agent, tool_calls, duration}`; the final report
 exposes these under `metrics.per_agent`, which the evaluation harness uses to compute
@@ -39,7 +39,7 @@ real per-agent efficiency (no hardcoded figures).
 ### 2. Learn Subsystem (multi-agent RAG, on-demand)
 
 Runs from the UI's **🎓 Learn** tab, on the extracted full text. Not part of the
-LangGraph pipeline — it is triggered by the user and covers the *whole* paper.
+LangGraph pipeline; it is triggered by the user and covers the *whole* paper.
 
 ```
 Full paper text
@@ -101,25 +101,25 @@ Multi-Agent-System-Research-Paper-Reviewer/
 
 ## Key Design Points
 
-- **Bring-your-own key(s) & model** — every agent takes an `api_key`/`model`, or a
+- **Bring-your-own key(s) & model**: every agent takes an `api_key`/`model`, or a
   shared `llm_pool`. The Streamlit app passes per-session keys; nothing is stored.
   Falls back to `GROQ_API_KEY` / `MODEL_NAME` env vars for local/CLI use.
-- **Multi-provider pool** (`llm_pool.py`) — Groq and NVIDIA (both OpenAI-compatible).
+- **Multi-provider pool** (`llm_pool.py`): Groq and NVIDIA (both OpenAI-compatible).
   Each task gets its own pool (see `build_task_pools` in `ui/app.py`): Review/Q&A/Memory
   on Groq; Understanding on NVIDIA `deepseek-v4-pro` (key 1); Verification on NVIDIA
-  `deepseek-v4-flash` (key 2). Accuracy pools set `attempts_per_provider=8` — the pool
+  `deepseek-v4-flash` (key 2). Accuracy pools set `attempts_per_provider=8`; the pool
   retries the primary (NVIDIA) with exponential backoff on transient errors
   (`503`/`404`/`429`/timeout; only `401/402/403` are permanent → circuit breaker) before
   falling back to Groq. Calls are strictly sequential. When a pool is set on an agent,
   `call_llm` routes through it.
-- **Never-forget memory** (`memory_agent.py`) — the Learn Q&A keeps a running,
+- **Never-forget memory** (`memory_agent.py`): the Learn Q&A keeps a running,
   compressed memory of the whole conversation so earlier context is never dropped.
-- **Rate-limit handling** — `base_agent.call_llm` retries with exponential backoff
+- **Rate-limit handling**: `base_agent.call_llm` retries with exponential backoff
   on Groq `429` errors (important for the Learn pipeline's multiple calls).
-- **RAG without an embeddings API** — Groq serves no embedding model, so `PaperRAG`
+- **RAG without an embeddings API**: Groq serves no embedding model, so `PaperRAG`
   uses `sentence-transformers` locally when available and **falls back to lexical
   TF-IDF** otherwise, so the app never breaks.
-- **KaTeX-safe math** — Learn-tab prompts enforce `$…$` / `$$…$$` and `aligned`
+- **KaTeX-safe math**: Learn-tab prompts enforce `$…$` / `$$…$$` and `aligned`
   environments; the UI post-processes LaTeX so equations render reliably.
 - **One paper at a time**, internet required (arXiv + Groq).
 
@@ -135,9 +135,9 @@ The harness (`eval/run_eval.py`) loads a declarative test suite (`eval/test_case
 runs each case through the full pipeline, and checks the result. **A case passes only if
 the observed status matches the expected one *and* no constraint is violated:**
 
-- **Constraints per case** — `max_duration_seconds`, `min_tool_calls`, `max_tool_calls`,
+- **Constraints per case**: `max_duration_seconds`, `min_tool_calls`, `max_tool_calls`,
   and `required_fields` (report keys that must be present).
-- **Content check** — a structurally-"successful" review whose text is just LLM error
+- **Content check**: a structurally-"successful" review whose text is just LLM error
   strings (invalid key, rate-limit, etc.) is flagged via `_llm_error_markers` and fails.
   This is what makes the success rate trustworthy: a broken-key run is reported as failing,
   not as 100% passing.
@@ -148,7 +148,7 @@ constraint violations by type, and a **per-agent efficiency profile** computed f
 `report["metrics"]["per_agent"]`. Output is JSON-safe (plain floats) and the saved results
 strip the paper's bulky `full_text`.
 
-**Test suite** — real, well-known arXiv IDs for the success cases (GPT-3 `2005.14165`,
+**Test suite**: real, well-known arXiv IDs for the success cases (GPT-3 `2005.14165`,
 ViT `2010.11929`, Adam `1412.6980`, GANs `1406.2661`, Attention `1706.03762`) plus three
 negative cases: an obviously invalid ID, an empty ID, and a **deliberately fake but
 real-looking ID** (`2402.99999`) that verifies the pipeline flags a nonexistent paper
@@ -161,4 +161,4 @@ calls/review, ~91 s mean latency/review (dominated by free-tier rate-limit backo
 
 ## Author
 
-**Priyadip Sau** — [website](https://priyadipsau.in/) · saupriyadip571@gmail.com
+**Priyadip Sau** · [website](https://priyadipsau.in/) · saupriyadip571@gmail.com

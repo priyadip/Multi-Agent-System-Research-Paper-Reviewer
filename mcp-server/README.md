@@ -17,15 +17,15 @@ The server loads the project's `.env` at startup, so if your root `.env` has a
 valid `GROQ_API_KEY` it just works. You can also pass credentials via the client
 config's `env` block (below), which overrides `.env`.
 
-- `GROQ_API_KEY` — **required** (drives the review pipeline).
-- `MODEL_NAME` — optional (defaults to `llama-3.1-8b-instant`).
-- `NVIDIA_API_KEY` — optional. If set, calls route through the multi-provider
+- `GROQ_API_KEY`: **required** (drives the review pipeline).
+- `MODEL_NAME`: optional (defaults to `llama-3.1-8b-instant`).
+- `NVIDIA_API_KEY`: optional. If set, calls route through the multi-provider
   pool (Groq primary, NVIDIA fallback, with retry) instead of Groq alone.
 
 If `GROQ_API_KEY` is missing, tool calls return a clear error instead of failing
 silently.
 
-## Setup — Claude Desktop
+## Setup for Claude Desktop
 
 1. Copy [`claude_desktop_config.example.json`](claude_desktop_config.example.json)
    into your Claude Desktop config file:
@@ -36,7 +36,7 @@ silently.
    whole `env` block.)
 3. Restart Claude Desktop. Ask it: *"Use paper-reviewer to review arXiv 1706.03762."*
 
-## Setup — Claude Code (CLI)
+## Setup for Claude Code (CLI)
 
 ```bash
 claude mcp add paper-reviewer -- \
